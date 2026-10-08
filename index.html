@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web NFC UID test</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1a1a1a; --muted: #666; --line: #d6d6d6;
+    --ok: #0a7a3d; --bad: #b3261e; --btn: #1a1a1a; --btn-fg: #fff;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #121212; --fg: #f0f0f0; --muted: #a0a0a0; --line: #333; --btn: #f0f0f0; --btn-fg: #121212; --ok: #5fd38d; --bad: #ff8a80; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; font-family: system-ui, sans-serif; background: var(--bg); color: var(--fg); max-width: 640px; }
+  h1 { font-size: 1.25rem; margin: 0 0 12px; }
+  #env { font-size: 0.875rem; color: var(--muted); margin-bottom: 16px; line-height: 1.5; }
+  .row { display: flex; gap: 8px; margin-bottom: 16px; }
+  button { flex: 1; padding: 14px; font-size: 1rem; border: 0; border-radius: 8px; background: var(--btn); color: var(--btn-fg); }
+  button:disabled { opacity: 0.4; }
+  #uid { font-family: ui-monospace, monospace; font-size: 1.75rem; padding: 20px 12px; border: 2px solid var(--line); border-radius: 8px; text-align: center; margin-bottom: 8px; word-break: break-all; }
+  #uid.ok { border-color: var(--ok); color: var(--ok); }
+  #uid.bad { border-color: var(--bad); color: var(--bad); }
+  #count { font-size: 0.875rem; color: var(--muted); margin-bottom: 16px; }
+  pre { font-size: 0.8125rem; white-space: pre-wrap; border: 1px solid var(--line); border-radius: 8px; padding: 12px; min-height: 160px; margin: 0 0 12px; }
+</style>
+</head>
+<body>
+  <h1>Web NFC UID test</h1>
+  <div id="env"></div>
+
+  <div class="row">
+    <button id="start">Start scan</button>
+    <button id="stop" disabled>Stop</button>
+  </div>
+
+  <div id="uid">No card read yet</div>
+  <div id="count">Reads: 0 &nbsp;|&nbsp; Read errors: 0</div>
+
+  <pre id="log"></pre>
+  <button id="copy">Copy log</button>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const logEl = $('log');
+  let controller = null;
+  let reads = 0;
+  let errors = 0;
+
+  function log(msg) {
+    const t = new Date().toLocaleTimeString('en-GB');
+    logEl.textContent = '[' + t + '] ' + msg + '\n' + logEl.textContent;
+  }
+
+  function updateCount() {
+    $('count').innerHTML = 'Reads: ' + reads + ' &nbsp;|&nbsp; Read errors: ' + errors;
+  }
+
+  // Environment report
+  const hasNfc = 'NDEFReader' in window;
+  $('env').innerHTML =
+    'Secure context (HTTPS): <b>' + window.isSecureContext + '</b><br>' +
+    'Web NFC supported: <b>' + hasNfc + '</b>';
+  log('Page loaded. UA: ' + navigator.userAgent);
+
+  $('start').addEventListener('click', async () => {
+    if (!hasNfc) {
+      log('ERROR: Web NFC is not available. Use Chrome on Android over HTTPS.');
+      $('uid').textContent = 'Web NFC not supported';
+      $('uid').className = 'bad';
+      return;
+    }
+    try {
+      controller = new AbortController();
+      const reader = new NDEFReader();
+
+      reader.addEventListener('reading', (event) => {
+        reads++;
+        updateCount();
+        const uid = event.serialNumber || '';
+        const nRecords = event.message ? event.message.records.length : 'n/a';
+        if (uid) {
+          $('uid').textContent = uid;
+          $('uid').className = 'ok';
+        } else {
+          $('uid').textContent = '(read event but EMPTY serialNumber)';
+          $('uid').className = 'bad';
+        }
+        if (navigator.vibrate) navigator.vibrate(120);
+        log('READING #' + reads + ': serialNumber="' + uid + '", NDEF records=' + nRecords);
+      });
+
+      reader.addEventListener('readingerror', () => {
+        errors++;
+        updateCount();
+        $('uid').textContent = 'Read error (tag not readable as NDEF)';
+        $('uid').className = 'bad';
+        log('READING ERROR #' + errors + ': a tag was detected but Chrome could not read it.');
+      });
+
+      await reader.scan({ signal: controller.signal });
+      log('Scan started. Hold the card against the back of the phone.');
+      $('start').disabled = true;
+      $('stop').disabled = false;
+    } catch (e) {
+      log('SCAN FAILED: ' + e.name + ' - ' + e.message);
+      $('uid').textContent = 'Scan failed: ' + e.name;
+      $('uid').className = 'bad';
+    }
+  });
+
+  $('stop').addEventListener('click', () => {
+    if (controller) controller.abort();
+    $('start').disabled = false;
+    $('stop').disabled = true;
+    log('Scan stopped.');
+  });
+
+  $('copy').addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(logEl.textContent);
+      log('Log copied to clipboard.');
+    } catch (e) {
+      log('Copy failed: ' + e.message + ' (select the log text manually instead)');
+    }
+  });
+</script>
+</body>
+</html>
