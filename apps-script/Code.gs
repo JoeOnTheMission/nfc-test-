@@ -386,6 +386,66 @@ function ensureCourseGrid(publicSs, courseName, registryStudents) {
 }
 
 /**
+ * Helper to convert "HH:mm" (24h) to "hh:mm a" (12h with AM/PM)
+ */
+function formatTime12h(timeStr) {
+  if (!timeStr) return "";
+  const parts = String(timeStr).split(":");
+  if (parts.length < 2) return String(timeStr);
+  let h = parseInt(parts[0], 10);
+  const m = parts[1].padStart(2, "0");
+  if (isNaN(h)) return String(timeStr);
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12;
+  h = h ? h : 12; // '0' -> 12
+  const hStr = h < 10 ? "0" + h : String(h);
+  return `${hStr}:${m} ${ampm}`;
+}
+
+/**
+ * Format session header for column in public sheet
+ */
+function formatSessionHeader(session) {
+  let datePart = session.date;
+  let timePart = "";
+
+  if (session.startedAt) {
+    try {
+      const d = new Date(session.startedAt);
+      datePart = Utilities.formatDate(d, TIMEZONE, "EEE, MMM d, yyyy");
+      timePart = Utilities.formatDate(d, TIMEZONE, "hh:mm a");
+    } catch (e) {
+      datePart = session.date;
+      timePart = String(session.startedAt).substring(11, 16) || "";
+    }
+  } else if (session.date) {
+    try {
+      const parts = session.date.split("-");
+      if (parts.length === 3) {
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        datePart = Utilities.formatDate(d, TIMEZONE, "EEE, MMM d, yyyy");
+      }
+    } catch (e) {
+      datePart = session.date;
+    }
+  }
+
+  // Format custom start/end time if available
+  let timingLabel = "";
+  if (session.startTime && session.endTime) {
+    timingLabel = `\n[${formatTime12h(session.startTime)} - ${formatTime12h(session.endTime)}]`;
+  } else if (session.startTime) {
+    timingLabel = `\n[${formatTime12h(session.startTime)}]`;
+  } else if (session.period) {
+    timingLabel = `\n[${session.period}]`;
+  } else if (timePart) {
+    timingLabel = `\n${timePart}`;
+  }
+
+  return `${datePart}${timingLabel}`;
+}
+
+/**
  * Ensure session column exists in public view sheet
  */
 function ensureSessionColumn(publicSs, sessionsSheet, session, registryStudents) {
@@ -405,12 +465,15 @@ function ensureSessionColumn(publicSs, sessionsSheet, session, registryStudents)
   }
 
   const courseSheet = ensureCourseGrid(publicSs, session.course, registryStudents);
+  const headerText = formatSessionHeader(session);
 
   if (existingSessionRow && existingSessionRow[4]) {
-    // Session column already exists
+    // Session column already exists - update header in case timing was edited
+    const viewCol = Number(existingSessionRow[4]);
+    courseSheet.getRange(1, viewCol).setValue(headerText).setFontWeight("bold").setWrap(true);
     return {
       courseSheet: courseSheet,
-      viewColumn: Number(existingSessionRow[4])
+      viewColumn: viewCol
     };
   }
 
@@ -418,34 +481,6 @@ function ensureSessionColumn(publicSs, sessionsSheet, session, registryStudents)
   const lastCol = Math.max(courseSheet.getLastColumn(), 1);
   const newCol = lastCol + 1;
   const colLetter = getColumnLetter(newCol);
-
-  // Format header: 'Tue, Mar 5, 2026' \n '02:30 PM' (or period label)
-  let datePart = session.date;
-  let timePart = "";
-  if (session.startedAt) {
-    try {
-      const d = new Date(session.startedAt);
-      datePart = Utilities.formatDate(d, TIMEZONE, "EEE, MMM d, yyyy");
-      timePart = Utilities.formatDate(d, TIMEZONE, "hh:mm a");
-    } catch (e) {
-      datePart = session.date;
-      timePart = String(session.startedAt).substring(11, 16) || "";
-    }
-  } else if (session.date) {
-    try {
-      // Parse YYYY-MM-DD
-      const parts = session.date.split("-");
-      if (parts.length === 3) {
-        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
-        datePart = Utilities.formatDate(d, TIMEZONE, "EEE, MMM d, yyyy");
-      }
-    } catch (e) {
-      datePart = session.date;
-    }
-  }
-
-  const slotInfo = session.period ? `\n[${session.period}]` : (timePart ? `\n${timePart}` : "");
-  const headerText = `${datePart}${slotInfo}`;
 
   courseSheet.getRange(1, newCol).setValue(headerText).setFontWeight("bold").setWrap(true);
   

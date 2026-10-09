@@ -772,12 +772,19 @@
         </div>
       </div>
 
-      <!-- Simulation Tool (for offline testing when holding 1 card) -->
-      <div class="card" style="padding: 0.75rem;">
-        <label style="font-size: 0.75rem;">Offline Test Simulation:</label>
-        <div style="display: flex; gap: 0.5rem;">
-          <input type="text" id="sim-uid-input" placeholder="Simulate UID (e.g. 04:99:88:77)" style="font-size: 0.85rem; padding: 0.5rem;">
-          <button onclick="simulateTap()" class="btn-secondary" style="width: auto; padding: 0.5rem 0.75rem; font-size: 0.85rem;">Tap</button>
+      <!-- Class Timing / Schedule Editor Card (Replaces Simulation) -->
+      <div class="card" style="padding: 0.85rem 1rem;">
+        <label style="font-size: 0.72rem; margin-bottom: 0.4rem;">⏰ Class Timing (Start &bull; End)</label>
+        <div style="display: flex; gap: 0.5rem; align-items: center;">
+          <div style="flex: 1;">
+            <span style="font-size: 0.68rem; color: var(--text-muted); font-weight: 700; display: block; margin-bottom: 0.2rem;">START</span>
+            <input type="time" id="session-start-time" onchange="updateSessionTimes()" style="font-size: 0.85rem; padding: 0.45rem 0.6rem; border-radius: 10px; width: 100%;">
+          </div>
+          <span style="color: var(--text-muted); font-weight: 800; font-size: 0.9rem; margin-top: 1rem;">&rarr;</span>
+          <div style="flex: 1;">
+            <span style="font-size: 0.68rem; color: var(--text-muted); font-weight: 700; display: block; margin-bottom: 0.2rem;">END</span>
+            <input type="time" id="session-end-time" onchange="updateSessionTimes()" style="font-size: 0.85rem; padding: 0.45rem 0.6rem; border-radius: 10px; width: 100%;">
+          </div>
         </div>
       </div>
 
@@ -910,7 +917,7 @@
     // ==========================================
     // 1. CONFIGURATION & APP VERSION
     // ==========================================
-    const APP_VERSION = "1.4.0";
+    const APP_VERSION = "1.5.0";
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvvOJvmQdc7ZoxusT5x1VvajvrRRR_fuCIn5Hl5Zco_O_Ma_o6Y7tlSVad_cuuUr1w/exec";
     const TIMEZONE = "Africa/Addis_Ababa";
 
@@ -1554,11 +1561,32 @@
       let sessions = loadStorage("att.sessions", []);
       let sessionRecord = sessions.find(s => s.sessionKey === sessionKey);
 
+      let defaultStartTime = "08:30";
+      let defaultEndTime = "10:30";
+
+      if (period === "2:30 - 4:30") {
+        defaultStartTime = "08:30";
+        defaultEndTime = "10:30";
+      } else if (period === "4:30 - 6:30") {
+        defaultStartTime = "10:30";
+        defaultEndTime = "12:30";
+      } else if (period === "7:30 - 9:20") {
+        defaultStartTime = "13:30";
+        defaultEndTime = "15:20";
+      } else {
+        const nowTime = new Date();
+        defaultStartTime = nowTime.toTimeString().substring(0, 5);
+        const endD = new Date(nowTime.getTime() + 2 * 3600 * 1000);
+        defaultEndTime = endD.toTimeString().substring(0, 5);
+      }
+
       if (!sessionRecord) {
         sessionRecord = {
           sessionKey: sessionKey,
           course: course,
           period: period,
+          startTime: defaultStartTime,
+          endTime: defaultEndTime,
           date: dateStr,
           startedAt: new Date().toISOString(),
           synced: false
@@ -1571,6 +1599,12 @@
 
       document.getElementById("session-course-title").textContent = course;
       document.getElementById("session-date-subtitle").textContent = `${dateStr} (${period})`;
+
+      // Populate Start & End time inputs
+      const startInput = document.getElementById("session-start-time");
+      const endInput = document.getElementById("session-end-time");
+      if (startInput) startInput.value = sessionRecord.startTime || defaultStartTime;
+      if (endInput) endInput.value = sessionRecord.endTime || defaultEndTime;
       
       resetLastTapCard();
       updateSessionCounter();
@@ -1582,20 +1616,36 @@
       scheduleDebouncedSync(500);
     }
 
+    function updateSessionTimes() {
+      if (!activeSession) return;
+      const startInput = document.getElementById("session-start-time");
+      const endInput = document.getElementById("session-end-time");
+      
+      const newStart = startInput ? startInput.value : "";
+      const newEnd = endInput ? endInput.value : "";
+
+      activeSession.startTime = newStart;
+      activeSession.endTime = newEnd;
+      activeSession.synced = false; // flag for sync to sheet
+
+      let sessions = loadStorage("att.sessions", []);
+      const idx = sessions.findIndex(s => s.sessionKey === activeSession.sessionKey);
+      if (idx !== -1) {
+        sessions[idx].startTime = newStart;
+        sessions[idx].endTime = newEnd;
+        sessions[idx].synced = false;
+        saveStorage("att.sessions", sessions);
+      }
+
+      scheduleDebouncedSync(1000);
+    }
+
     function endSession() {
       stopNfcScan();
       releaseWakeLock();
       activeSession = null;
       switchScreen("home");
       updateSyncBadges();
-    }
-
-    function simulateTap() {
-      const input = document.getElementById("sim-uid-input");
-      const raw = input.value.trim();
-      if (!raw) return;
-      onUid(raw, "simulation");
-      input.value = "";
     }
 
     function onUid(rawUid, source = "nfc") {
@@ -2112,6 +2162,9 @@
           sessions: unsyncedSessions.map(s => ({
             sessionKey: s.sessionKey,
             course: s.course,
+            period: s.period,
+            startTime: s.startTime,
+            endTime: s.endTime,
             date: s.date,
             startedAt: s.startedAt
           })),
