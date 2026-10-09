@@ -347,7 +347,7 @@
         </button>
       </div>
 
-      <div style="border-top: 1px solid var(--card-border); padding-top: 0.75rem; display: flex; justify-content: space-between;">
+      <div style="border-top: 1px solid var(--card-border); padding-top: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
         <a href="./nfc-test.html" style="color: var(--accent); font-size: 0.85rem; text-decoration: none;">Open NFC Diag Tool &rarr;</a>
         <button onclick="clearLocalStorageData()" style="width: auto; padding: 0.3rem 0.6rem; font-size: 0.75rem; background: transparent; color: var(--red); border: 1px solid var(--red-border);">Reset Local Storage</button>
       </div>
@@ -423,14 +423,17 @@
   </div>
 
   <footer>
-    <div>Tap-to-Attend &bull; <span id="app-version">v0.2.0</span></div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 0.35rem;">
+      <div><span id="offline-ready-badge" class="badge badge-success" style="display: none; font-size: 0.75rem;">✓ Ready for offline use</span></div>
+      <div>Tap-to-Attend &bull; <span id="app-version">v0.3.0</span></div>
+    </div>
   </footer>
 
   <script>
     // ==========================================
     // 1. CONFIGURATION & APP VERSION
     // ==========================================
-    const APP_VERSION = "0.2.0";
+    const APP_VERSION = "0.3.0";
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvvOJvmQdc7ZoxusT5x1VvajvrRRR_fuCIn5Hl5Zco_O_Ma_o6Y7tlSVad_cuuUr1w/exec";
     const TIMEZONE = "Africa/Addis_Ababa";
 
@@ -489,6 +492,11 @@
       if (el) el.classList.toggle("active", visible);
       const resumeBtn = document.getElementById("resume-scan-btn");
       if (resumeBtn) resumeBtn.style.display = visible ? "block" : "none";
+    }
+
+    function showOfflineReadyBadge(visible) {
+      const badge = document.getElementById("offline-ready-badge");
+      if (badge) badge.style.display = visible ? "inline-flex" : "none";
     }
 
     function clearLocalStorageData() {
@@ -1249,9 +1257,23 @@
     // Register Service Worker for offline PWA
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("./sw.js").then((reg) => {
-        reg.update();
+        if (navigator.serviceWorker.controller) {
+          showOfflineReadyBadge(true);
+        }
+        reg.onupdatefound = () => {
+          const installingWorker = reg.installing;
+          installingWorker.onstatechange = () => {
+            if (installingWorker.state === "activated" || (installingWorker.state === "installed" && navigator.serviceWorker.controller)) {
+              showOfflineReadyBadge(true);
+            }
+          };
+        };
       }).catch((err) => {
-        console.warn("SW registration:", err);
+        console.warn("SW registration error:", err);
+      });
+
+      navigator.serviceWorker.addEventListener("controllerchange", () => {
+        showOfflineReadyBadge(true);
       });
     }
 

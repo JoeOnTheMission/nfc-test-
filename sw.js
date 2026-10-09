@@ -1,8 +1,8 @@
 // Tap-to-Attend Service Worker
-const CACHE_VERSION = "v0.2.0";
+const CACHE_VERSION = "v0.3.0";
 const CACHE_NAME = `tap-to-attend-${CACHE_VERSION}`;
 
-// Assets to cache locally. Strict relative paths for GitHub Pages sub-path hosting.
+// Assets to cache locally (strict relative paths for GitHub Pages sub-path hosting)
 const ASSETS_TO_CACHE = [
   "./",
   "./index.html",
@@ -21,7 +21,7 @@ self.addEventListener("install", (event) => {
   );
 });
 
-// Activate: clean up old caches and take immediate control of clients
+// Activate: clean up old caches and claim control of all clients
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
