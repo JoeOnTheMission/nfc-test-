@@ -408,9 +408,19 @@
     <!-- SCREEN 1: UNLOCK SCREEN                    -->
     <!-- ========================================== -->
     <div id="screen-unlock" class="screen card active">
-      <h2 style="font-size: 1.25rem;">Enter Admin PIN</h2>
+      <h2 style="font-size: 1.25rem;" id="unlock-title">Enter Admin PIN</h2>
       <p style="font-size: 0.85rem; color: var(--text-muted);">Authenticate to access class rosters and scan attendance.</p>
-      
+
+      <!-- Biometric section (shown when fingerprint is registered) -->
+      <div id="biometric-section" style="display: none; flex-direction: column; align-items: center; gap: 0.75rem; padding: 0.5rem 0;">
+        <button type="button" id="biometric-btn" onclick="handleBiometricUnlock()" style="background: linear-gradient(135deg, #0ea5e9, #6366f1); font-size: 1.05rem; letter-spacing: 0.02em;">
+          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 11c0-1.1.9-2 2-2s2 .9 2 2v1M6 13c0-3.3 2.7-6 6-6s6 2.7 6 6v1M3 15c0-5 4-9 9-9s9 4 9 9M3 19c0-7.2 4-13 9-13s9 5.8 9 13"/></svg>
+          Unlock with Fingerprint
+        </button>
+        <button type="button" onclick="showPinFallback()" style="width: auto; background: transparent; color: var(--text-muted); border: none; font-size: 0.8rem; padding: 0.1rem; font-weight: 400; text-decoration: underline;">Use PIN instead</button>
+      </div>
+
+      <!-- PIN form (always present, hidden behind biometric by default) -->
       <form id="unlock-form" onsubmit="handleUnlock(event)">
         <label for="pin-input">PIN</label>
         <input type="password" id="pin-input" inputmode="numeric" pattern="[0-9]*" placeholder="••••" autocomplete="current-password" autofocus required>
@@ -452,9 +462,12 @@
         </button>
       </div>
 
-      <div style="border-top: 1px solid var(--card-border); padding-top: 0.75rem; display: flex; justify-content: space-between; align-items: center;">
+      <div style="border-top: 1px solid var(--card-border); padding-top: 0.75rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.4rem;">
         <a href="./nfc-test.html" style="color: var(--accent); font-size: 0.85rem; text-decoration: none;">Open NFC Diag Tool &rarr;</a>
-        <button onclick="clearLocalStorageData()" style="width: auto; padding: 0.3rem 0.6rem; font-size: 0.75rem; background: transparent; color: var(--red); border: 1px solid var(--red-border);">Reset Local Storage</button>
+        <div style="display: flex; gap: 0.4rem;">
+          <button id="remove-biometric-btn" onclick="removeBiometric()" style="display: none; width: auto; padding: 0.3rem 0.6rem; font-size: 0.75rem; background: transparent; color: var(--amber); border: 1px solid var(--amber-border);">🔑 Remove Fingerprint</button>
+          <button onclick="clearLocalStorageData()" style="width: auto; padding: 0.3rem 0.6rem; font-size: 0.75rem; background: transparent; color: var(--red); border: 1px solid var(--red-border);">Reset Local Storage</button>
+        </div>
       </div>
     </div>
 
@@ -644,7 +657,7 @@
     // ==========================================
     // 1. CONFIGURATION & APP VERSION
     // ==========================================
-    const APP_VERSION = "1.0.0";
+    const APP_VERSION = "1.1.0";
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvvOJvmQdc7ZoxusT5x1VvajvrRRR_fuCIn5Hl5Zco_O_Ma_o6Y7tlSVad_cuuUr1w/exec";
     const TIMEZONE = "Africa/Addis_Ababa";
 
@@ -772,14 +785,18 @@
           const salt = generateSalt();
           const hash = await hashPin(pin, salt);
           saveStorage("att.pinCheck", { salt, hash });
+          saveStorage("att.bioToken", pin); // stored for biometric unlock recovery
 
           sessionPin = pin;
           sessionStorage.setItem("att.pin", pin);
           await refreshBootstrapOnline();
           switchScreen("home");
           updateSyncBadges();
+          // Non-blocking: prompt fingerprint registration after navigation
+          registerBiometric(pin);
           return;
         } else {
+
           errorEl.textContent = "Incorrect PIN. Please try again.";
           errorEl.style.display = "block";
           btn.disabled = false;
@@ -803,6 +820,156 @@
         errorEl.textContent = "Offline unlock failed: Connect online once to verify PIN.";
         errorEl.style.display = "block";
         btn.disabled = false;
+      }
+    }
+
+    // ==========================================
+    // 3b. BIOMETRIC / WEBAUTHN AUTHENTICATION
+    // ==========================================
+    const BIOMETRIC_CRED_KEY = "att.biometricCredId";
+
+    /** Called after successful PIN unlock to register a WebAuthn biometric credential */
+    async function registerBiometric(pin) {
+      if (!window.PublicKeyCredential) return; // browser unsupported
+      try {
+        // Use a fixed userId derived from a hash of the app name (no PII stored)
+        const userIdBytes = new Uint8Array(16);
+        crypto.getRandomValues(userIdBytes);
+
+        const challenge = new Uint8Array(32);
+        crypto.getRandomValues(challenge);
+
+        const credential = await navigator.credentials.create({
+          publicKey: {
+            challenge,
+            rp: { name: "Tap-to-Attend" },
+            user: {
+              id: userIdBytes,
+              name: "class-rep",
+              displayName: "Class Representative"
+            },
+            pubKeyCredParams: [
+              { type: "public-key", alg: -7 },   // ES256
+              { type: "public-key", alg: -257 }  // RS256
+            ],
+            authenticatorSelection: {
+              authenticatorAttachment: "platform",  // device biometric only
+              userVerification: "required"           // requires fingerprint/face
+            },
+            timeout: 60000
+          }
+        });
+
+        if (credential) {
+          // Persist the credential ID (base64url encoded) for future get() calls
+          const rawId = new Uint8Array(credential.rawId);
+          const credIdB64 = btoa(String.fromCharCode(...rawId));
+          saveStorage(BIOMETRIC_CRED_KEY, credIdB64);
+          console.log("Biometric credential registered.");
+          // Show the fingerprint button next time (update UI state immediately)
+          showBiometricUnlockUI(true);
+        }
+      } catch (err) {
+        // User cancelled or device doesn't support — silently skip
+        console.warn("Biometric registration skipped:", err.message);
+      }
+    }
+
+    /** Authenticate using a previously registered biometric credential */
+    async function handleBiometricUnlock() {
+      const credIdB64 = loadStorage(BIOMETRIC_CRED_KEY, null);
+      if (!credIdB64) { showPinFallback(); return; }
+
+      const btn = document.getElementById("biometric-btn");
+      const errorEl = document.getElementById("unlock-error");
+      btn.disabled = true;
+      btn.textContent = "⏳ Waiting for fingerprint…";
+      errorEl.style.display = "none";
+
+      try {
+        const rawId = Uint8Array.from(atob(credIdB64), c => c.charCodeAt(0));
+        const challenge = new Uint8Array(32);
+        crypto.getRandomValues(challenge);
+
+        const assertion = await navigator.credentials.get({
+          publicKey: {
+            challenge,
+            allowCredentials: [{ id: rawId, type: "public-key" }],
+            userVerification: "required",
+            timeout: 60000
+          }
+        });
+
+        if (assertion) {
+          // Biometric passed — unlock using the cached offline PIN hash
+          const pinCheck = loadStorage("att.pinCheck", null);
+          if (!pinCheck || !pinCheck.salt || !pinCheck.hash) {
+            throw new Error("No cached PIN hash — please re-enter PIN once.");
+          }
+          // We can't recover the raw PIN from the hash, so use empty sentinel
+          // Instead, store a recovery token alongside the biometric credential
+          const recoveryToken = loadStorage("att.bioToken", null);
+          if (!recoveryToken) {
+            throw new Error("No recovery token. Enter PIN once to refresh.");
+          }
+          sessionPin = recoveryToken;
+          sessionStorage.setItem("att.pin", sessionPin);
+          initAudio();
+          loadBootstrapOffline();
+          switchScreen("home");
+          updateSyncBadges();
+          // Try background bootstrap refresh
+          refreshBootstrapOnline().catch(() => {});
+        }
+      } catch (err) {
+        console.warn("Biometric unlock error:", err);
+        const msg = err.name === "NotAllowedError"
+          ? "Fingerprint not recognised or cancelled."
+          : (err.message || "Biometric failed — use PIN instead.");
+        errorEl.textContent = msg;
+        errorEl.style.display = "block";
+        // Re-enable button
+        const freshBtn = document.getElementById("biometric-btn");
+        if (freshBtn) {
+          freshBtn.disabled = false;
+          freshBtn.innerHTML = `<svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 11c0-1.1.9-2 2-2s2 .9 2 2v1M6 13c0-3.3 2.7-6 6-6s6 2.7 6 6v1M3 15c0-5 4-9 9-9s9 4 9 9M3 19c0-7.2 4-13 9-13s9 5.8 9 13"/></svg> Unlock with Fingerprint`;
+        }
+      }
+    }
+
+    /** Show PIN form instead of biometric (fallback link clicked) */
+    function showPinFallback() {
+      document.getElementById("biometric-section").style.display = "none";
+      document.getElementById("unlock-form").style.display = "";
+      document.getElementById("unlock-title").textContent = "Enter Admin PIN";
+      document.getElementById("unlock-error").style.display = "none";
+      const pinInput = document.getElementById("pin-input");
+      if (pinInput) { pinInput.value = ""; pinInput.focus(); }
+    }
+
+    /** Toggle between biometric UI and PIN form on the unlock screen */
+    function showBiometricUnlockUI(show) {
+      const bioSection = document.getElementById("biometric-section");
+      const pinForm = document.getElementById("unlock-form");
+      const title = document.getElementById("unlock-title");
+      if (show) {
+        bioSection.style.display = "flex";
+        pinForm.style.display = "none";
+        title.textContent = "Welcome Back";
+      } else {
+        bioSection.style.display = "none";
+        pinForm.style.display = "";
+        title.textContent = "Enter Admin PIN";
+      }
+    }
+
+    /** On page load: check if biometric is available and show fingerprint button */
+    function checkBiometricOnLoad() {
+      const credId = loadStorage(BIOMETRIC_CRED_KEY, null);
+      const pinCheck = loadStorage("att.pinCheck", null);
+      const token = loadStorage("att.bioToken", null);
+      if (credId && pinCheck && token && window.PublicKeyCredential) {
+        showBiometricUnlockUI(true);
       }
     }
 
@@ -1691,6 +1858,25 @@
       document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
       const target = document.getElementById(`screen-${screenId}`);
       if (target) target.classList.add("active");
+
+      // Show "Remove Fingerprint" button on home screen only when biometric is registered
+      if (screenId === "home") {
+        const removeBtn = document.getElementById("remove-biometric-btn");
+        if (removeBtn) {
+          const hasBio = !!loadStorage(BIOMETRIC_CRED_KEY, null);
+          removeBtn.style.display = hasBio ? "inline-flex" : "none";
+        }
+      }
+    }
+
+    /** Remove the stored biometric credential so PIN is required next open */
+    function removeBiometric() {
+      if (!confirm("Remove fingerprint unlock? You will need your PIN next time.")) return;
+      localStorage.removeItem(BIOMETRIC_CRED_KEY);
+      localStorage.removeItem("att.bioToken");
+      const removeBtn = document.getElementById("remove-biometric-btn");
+      if (removeBtn) removeBtn.style.display = "none";
+      alert("Fingerprint removed. PIN required on next launch.");
     }
 
     function resetLastTapCard() {
@@ -1846,6 +2032,9 @@
         loadBootstrapOffline();
         switchScreen("home");
         updateSyncBadges();
+      } else {
+        // Show fingerprint button if biometric credential is stored
+        checkBiometricOnLoad();
       }
     });
   </script>
