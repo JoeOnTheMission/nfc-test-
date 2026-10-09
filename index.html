@@ -620,6 +620,16 @@
       <p class="subtitle">AASTU Attendance System</p>
     </header>
 
+    <!-- New Version Available Popup Banner -->
+    <div id="update-alert" class="banner" style="background: linear-gradient(135deg, rgba(0, 240, 255, 0.2), rgba(2, 132, 199, 0.3)); border: 1px solid var(--accent); color: var(--text); display: none; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.75rem 1rem; box-shadow: 0 0 20px rgba(0, 240, 255, 0.3);">
+      <div style="font-size: 0.85rem; font-weight: 700; text-align: left;">
+        🚀 <span id="update-msg">New update available!</span>
+      </div>
+      <button onclick="applyAppUpdate()" style="width: auto; padding: 0.4rem 0.85rem; font-size: 0.8rem; border-radius: 10px; box-shadow: none;">
+        Update Now
+      </button>
+    </div>
+
     <!-- Global Emergency Storage Banner -->
     <div id="storage-alert" class="banner banner-danger">
       ⚠️ STORAGE FAILED: Taps may be lost! Check device storage.
@@ -900,7 +910,7 @@
     // ==========================================
     // 1. CONFIGURATION & APP VERSION
     // ==========================================
-    const APP_VERSION = "1.3.1";
+    const APP_VERSION = "1.4.0";
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvvOJvmQdc7ZoxusT5x1VvajvrRRR_fuCIn5Hl5Zco_O_Ma_o6Y7tlSVad_cuuUr1w/exec";
     const TIMEZONE = "Africa/Addis_Ababa";
 
@@ -2342,25 +2352,63 @@
       }
     }, 30000);
 
+    let newWorkerWaiting = null;
+
+    function showUpdatePopup(worker) {
+      newWorkerWaiting = worker;
+      const alert = document.getElementById("update-alert");
+      if (alert) {
+        alert.style.display = "flex";
+      }
+    }
+
+    function applyAppUpdate() {
+      if (newWorkerWaiting) {
+        newWorkerWaiting.postMessage({ action: "skipWaiting" });
+      }
+      window.location.reload();
+    }
+
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.register("./sw.js", { updateViaCache: "none" }).then((reg) => {
         if (navigator.serviceWorker.controller) {
           showOfflineReadyBadge(true);
         }
+
+        // If an updated worker is already waiting in background
+        if (reg.waiting) {
+          showUpdatePopup(reg.waiting);
+        }
+
+        // Listen for new worker updates
         reg.onupdatefound = () => {
           const installingWorker = reg.installing;
           installingWorker.onstatechange = () => {
-            if (installingWorker.state === "activated" || (installingWorker.state === "installed" && navigator.serviceWorker.controller)) {
-              showOfflineReadyBadge(true);
+            if (installingWorker.state === "installed") {
+              if (navigator.serviceWorker.controller) {
+                // New update is ready and waiting!
+                showUpdatePopup(installingWorker);
+              } else {
+                showOfflineReadyBadge(true);
+              }
             }
           };
         };
+
+        // Periodically check for updates every 60 seconds when app is open
+        setInterval(() => {
+          reg.update().catch(() => {});
+        }, 60000);
       }).catch((err) => {
         console.warn("SW registration error:", err);
       });
 
+      let refreshing = false;
       navigator.serviceWorker.addEventListener("controllerchange", () => {
-        showOfflineReadyBadge(true);
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
       });
     }
 

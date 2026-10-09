@@ -1,5 +1,5 @@
 // Tap-to-Attend Service Worker
-const CACHE_VERSION = "v1.3.1";
+const CACHE_VERSION = "v1.4.0";
 const CACHE_NAME = `tap-to-attend-${CACHE_VERSION}`;
 
 // Assets to cache locally (strict relative paths for GitHub Pages sub-path hosting)
@@ -21,6 +21,13 @@ self.addEventListener("install", (event) => {
   );
 });
 
+// Message: allow client to trigger immediate activation
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.action === "skipWaiting") {
+    self.skipWaiting();
+  }
+});
+
 // Activate: clean up old caches and claim control of all clients
 self.addEventListener("activate", (event) => {
   event.waitUntil(
@@ -36,7 +43,7 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Fetch: Cache-first for same-origin GET requests. Never cache external or POST requests.
+// Fetch: Network-First for HTML/navigation so code updates apply immediately. Cache-First for static assets.
 self.addEventListener("fetch", (event) => {
   const request = event.request;
 
@@ -45,13 +52,35 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  const isHtml = request.mode === "navigate" || (request.headers.get("accept") && request.headers.get("accept").includes("text/html")) || request.url.endsWith("index.html") || request.url.endsWith("/");
+
+  if (isHtml) {
+    // Network-First for HTML: Always fetch latest code if online, fallback to cache if offline
+    event.respondWith(
+      fetch(request).then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(request, responseToCache);
+          });
+        }
+        return networkResponse;
+      }).catch(() => {
+        return caches.match(request).then((cachedResponse) => {
+          return cachedResponse || caches.match("./index.html");
+        });
+      })
+    );
+    return;
+  }
+
+  // Cache-First for other static assets (manifest, images, etc.)
   event.respondWith(
     caches.match(request).then((cachedResponse) => {
       if (cachedResponse) {
         return cachedResponse;
       }
       return fetch(request).then((networkResponse) => {
-        // Cache valid same-origin assets on the fly
         if (networkResponse && networkResponse.status === 200 && networkResponse.type === "basic") {
           const responseToCache = networkResponse.clone();
           caches.open(CACHE_NAME).then((cache) => {
