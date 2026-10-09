@@ -2,22 +2,34 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Tap-to-Attend</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <style>
     :root {
       --bg: #0f172a;
       --card-bg: #1e293b;
+      --card-border: #334155;
       --text: #f8fafc;
       --text-muted: #94a3b8;
       --accent: #38bdf8;
-      --border: #334155;
+      --accent-hover: #0284c7;
+      --green: #22c55e;
+      --green-bg: rgba(34, 197, 94, 0.15);
+      --green-border: rgba(34, 197, 94, 0.35);
+      --amber: #f59e0b;
+      --amber-bg: rgba(245, 158, 11, 0.15);
+      --amber-border: rgba(245, 158, 11, 0.35);
+      --red: #ef4444;
+      --red-bg: rgba(239, 68, 68, 0.15);
+      --red-border: rgba(239, 68, 68, 0.35);
+      --radius: 12px;
     }
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
+      -webkit-tap-highlight-color: transparent;
     }
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -28,82 +40,972 @@
       flex-direction: column;
       align-items: center;
       justify-content: space-between;
-      padding: 1.5rem;
+      padding: 1rem;
     }
-    header {
+    .app-container {
       width: 100%;
       max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    header {
       text-align: center;
-      padding-top: 1rem;
+      padding: 0.5rem 0;
     }
     h1 {
-      font-size: 1.75rem;
+      font-size: 1.6rem;
       font-weight: 700;
       color: var(--text);
     }
     .subtitle {
       color: var(--text-muted);
-      font-size: 0.95rem;
-      margin-top: 0.25rem;
+      font-size: 0.85rem;
+      margin-top: 0.2rem;
     }
-    main {
-      width: 100%;
-      max-width: 480px;
+    .card {
       background-color: var(--card-bg);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 1.5rem;
-      text-align: center;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 1.25rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
-    .status-badge {
-      display: inline-block;
-      padding: 0.35rem 0.75rem;
+    .screen {
+      display: none;
+      flex-direction: column;
+      gap: 1rem;
+    }
+    .screen.active {
+      display: flex;
+    }
+    .banner {
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      text-align: center;
+      display: none;
+    }
+    .banner-danger {
+      background-color: var(--red-bg);
+      color: var(--red);
+      border: 1px solid var(--red-border);
+    }
+    .banner-warning {
+      background-color: var(--amber-bg);
+      color: var(--amber);
+      border: 1px solid var(--amber-border);
+    }
+    .banner.active {
+      display: block;
+    }
+    label {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      display: block;
+      margin-bottom: 0.4rem;
+    }
+    input[type="password"],
+    input[type="text"],
+    select {
+      width: 100%;
+      padding: 0.85rem 1rem;
+      background-color: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.15s ease;
+    }
+    input:focus, select:focus {
+      border-color: var(--accent);
+    }
+    button {
+      width: 100%;
+      padding: 0.9rem 1.25rem;
+      background-color: var(--accent);
+      color: #0f172a;
+      border: none;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: opacity 0.15s ease;
+    }
+    button:active {
+      opacity: 0.85;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      background-color: transparent;
+      color: var(--text-muted);
+      border: 1px solid var(--card-border);
+    }
+    .btn-secondary:active {
+      background-color: rgba(255, 255, 255, 0.05);
+      color: var(--text);
+    }
+    .btn-danger {
+      background-color: var(--red-bg);
+      color: var(--red);
+      border: 1px solid var(--red-border);
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.25rem 0.6rem;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge-info {
       background-color: rgba(56, 189, 248, 0.15);
       color: var(--accent);
       border: 1px solid rgba(56, 189, 248, 0.3);
-      border-radius: 9999px;
-      font-size: 0.85rem;
-      font-weight: 600;
-      margin-bottom: 1rem;
     }
-    p {
+    .badge-success {
+      background-color: var(--green-bg);
+      color: var(--green);
+      border: 1px solid var(--green-border);
+    }
+    .badge-warning {
+      background-color: var(--amber-bg);
+      color: var(--amber);
+      border: 1px solid var(--amber-border);
+    }
+    .badge-danger {
+      background-color: var(--red-bg);
+      color: var(--red);
+      border: 1px solid var(--red-border);
+    }
+
+    /* Session Screen Styles */
+    .session-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+    .counter-display {
+      text-align: center;
+      padding: 1rem 0;
+    }
+    .counter-number {
+      font-size: 3rem;
+      font-weight: 800;
+      color: var(--accent);
+      line-height: 1;
+    }
+    .counter-label {
+      font-size: 0.85rem;
       color: var(--text-muted);
-      line-height: 1.5;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-top: 0.25rem;
+    }
+    .last-tap-card {
+      padding: 1.5rem 1rem;
+      text-align: center;
+      border-radius: var(--radius);
+      border: 2px dashed var(--card-border);
+      min-height: 140px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      transition: all 0.2s ease;
+    }
+    .last-tap-card.present {
+      background-color: var(--green-bg);
+      border: 2px solid var(--green);
+      color: var(--green);
+    }
+    .last-tap-card.duplicate {
+      background-color: var(--amber-bg);
+      border: 2px solid var(--amber);
+      color: var(--amber);
+    }
+    .last-tap-card.unknown {
+      background-color: var(--red-bg);
+      border: 2px solid var(--red);
+      color: var(--red);
+    }
+    .tap-student-name {
+      font-size: 1.75rem;
+      font-weight: 800;
+      word-break: break-word;
+      line-height: 1.2;
+    }
+    .tap-status-desc {
       font-size: 0.95rem;
+      font-weight: 600;
+      margin-top: 0.35rem;
+    }
+    .recent-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+    .recent-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.6rem 0.75rem;
+      background-color: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+    .recent-item-name {
+      font-weight: 600;
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .recent-item-meta {
+      color: var(--text-muted);
+      font-size: 0.75rem;
     }
     footer {
       width: 100%;
       max-width: 480px;
       text-align: center;
       padding: 1rem 0;
-      border-top: 1px solid var(--border);
+      border-top: 1px solid var(--card-border);
       color: var(--text-muted);
-      font-size: 0.85rem;
+      font-size: 0.8rem;
     }
   </style>
 </head>
 <body>
-  <header>
-    <h1>Tap-to-Attend</h1>
-    <p class="subtitle">AASTU Attendance System</p>
-  </header>
+  <div class="app-container">
+    <header>
+      <h1>Tap-to-Attend</h1>
+      <p class="subtitle">AASTU Attendance System</p>
+    </header>
 
-  <main>
-    <div class="status-badge">Step 0: Skeleton Active</div>
-    <p>Tap-to-Attend app shell initialized.</p>
-    <p style="margin-top: 0.5rem; margin-bottom: 1.25rem;">Ready for Step 1 backend setup and local reader integration.</p>
-    <a href="./nfc-test.html" style="display: inline-block; width: 100%; padding: 0.75rem 1rem; background-color: var(--accent); color: #0f172a; text-decoration: none; border-radius: 8px; font-weight: 700; font-size: 0.95rem;">Open NFC Diagnostic Tool (nfc-test.html)</a>
-  </main>
+    <!-- Global Emergency Storage Banner -->
+    <div id="storage-alert" class="banner banner-danger">
+      ⚠️ STORAGE FAILED: Taps may be lost! Check device storage.
+    </div>
+
+    <!-- Scanning Paused Banner -->
+    <div id="paused-alert" class="banner banner-warning">
+      ⏸️ SCANNING PAUSED: Keep screen visible to scan cards
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 1: UNLOCK SCREEN                    -->
+    <!-- ========================================== -->
+    <div id="screen-unlock" class="screen card active">
+      <h2 style="font-size: 1.25rem;">Enter Admin PIN</h2>
+      <p style="font-size: 0.85rem; color: var(--text-muted);">Authenticate to access class rosters and scan attendance.</p>
+      
+      <form id="unlock-form" onsubmit="handleUnlock(event)">
+        <label for="pin-input">PIN</label>
+        <input type="password" id="pin-input" inputmode="numeric" pattern="[0-9]*" placeholder="••••" autocomplete="current-password" autofocus required>
+        <div id="unlock-error" style="color: var(--red); font-size: 0.85rem; margin-top: 0.4rem; display: none;"></div>
+        
+        <button type="submit" id="unlock-btn" style="margin-top: 1rem;">Unlock System</button>
+      </form>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 2: HOME SCREEN                      -->
+    <!-- ========================================== -->
+    <div id="screen-home" class="screen card">
+      <div style="display: flex; justify-content: space-between; align-items: center;">
+        <span class="badge badge-info" id="home-status-badge">Ready</span>
+        <span style="font-size: 0.8rem; color: var(--text-muted);" id="registry-count">0 students</span>
+      </div>
+
+      <div>
+        <label for="course-select">Select Course</label>
+        <select id="course-select"></select>
+      </div>
+
+      <button id="start-session-btn" onclick="startSession()">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        Start Session
+      </button>
+
+      <div style="display: flex; gap: 0.5rem;">
+        <button class="btn-secondary" onclick="refreshBootstrapOnline()" id="refresh-btn" style="font-size: 0.85rem; padding: 0.75rem;">
+          Refresh Roster
+        </button>
+        <button class="btn-secondary" onclick="window.location.href='./nfc-test.html'" style="font-size: 0.85rem; padding: 0.75rem;">
+          NFC Diag Tool
+        </button>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SCREEN 3: ACTIVE SESSION SCREEN            -->
+    <!-- ========================================== -->
+    <div id="screen-session" class="screen">
+      <div class="card">
+        <div class="session-header">
+          <div>
+            <h2 id="session-course-title" style="font-size: 1.25rem;">Course Name</h2>
+            <div id="session-date-subtitle" style="font-size: 0.85rem; color: var(--text-muted);">2026-10-09</div>
+          </div>
+          <span class="badge badge-success" id="session-badge">Scanning</span>
+        </div>
+
+        <div class="counter-display">
+          <div class="counter-number" id="counter-present">0</div>
+          <div class="counter-label" id="counter-total-label">Present of 0 Students</div>
+        </div>
+      </div>
+
+      <!-- Large Tap Feedback Card -->
+      <div id="last-tap-card" class="last-tap-card card">
+        <div id="tap-student-name" class="tap-student-name">Tap Card Now</div>
+        <div id="tap-status-desc" class="tap-status-desc">Hold ID against back of phone</div>
+      </div>
+
+      <!-- Recent Taps List -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+          <label style="margin-bottom: 0;">Recent Taps</label>
+          <span id="recent-count" style="font-size: 0.75rem; color: var(--text-muted);">0 taps recorded</span>
+        </div>
+        <div id="recent-list" class="recent-list">
+          <div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 0.5rem;">No taps in this session yet</div>
+        </div>
+      </div>
+
+      <!-- Session Actions -->
+      <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+        <button class="btn-secondary" onclick="copyBackupToClipboard()">
+          📋 Copy Backup JSON
+        </button>
+        <button class="btn-danger" onclick="endSession()">
+          End Session
+        </button>
+      </div>
+    </div>
+  </div>
 
   <footer>
     <div>Tap-to-Attend &bull; <span id="app-version">v0.1.0</span></div>
   </footer>
 
   <script>
-    // Configuration & App Version
+    // ==========================================
+    // 1. CONFIGURATION
+    // ==========================================
     const APP_VERSION = "0.1.0";
+    const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvvOJvmQdc7ZoxusT5x1VvajvrRRR_fuCIn5Hl5Zco_O_Ma_o6Y7tlSVad_cuuUr1w/exec";
+    const TIMEZONE = "Africa/Addis_Ababa";
+
     document.getElementById("app-version").textContent = `v${APP_VERSION}`;
+
+    // Application state
+    let sessionPin = sessionStorage.getItem("att.pin") || "";
+    let activeSession = null;
+    let currentScreen = "unlock";
+    let lastSeenUid = "";
+    let lastSeenTime = 0;
+
+    // Web NFC & Audio & WakeLock state
+    let ndefReader = null;
+    let nfcAbortController = null;
+    let isScanning = false;
+    let audioCtx = null;
+    let wakeLock = null;
+
+    // ==========================================
+    // 2. STORAGE HELPERS (Safe with Try/Catch)
+    // ==========================================
+    function loadStorage(key, defaultValue) {
+      try {
+        const item = localStorage.getItem(key);
+        return item ? JSON.parse(item) : defaultValue;
+      } catch (err) {
+        console.error(`Storage read error for ${key}:`, err);
+        return defaultValue;
+      }
+    }
+
+    function saveStorage(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+        return true;
+      } catch (err) {
+        console.error(`Storage write error for ${key}:`, err);
+        showStorageAlert(true);
+        return false;
+      }
+    }
+
+    function showStorageAlert(visible) {
+      const el = document.getElementById("storage-alert");
+      if (el) el.classList.toggle("active", visible);
+    }
+
+    function showPausedBanner(visible) {
+      const el = document.getElementById("paused-alert");
+      if (el) el.classList.toggle("active", visible);
+    }
+
+    // ==========================================
+    // 3. CRYPTO & PIN AUTHENTICATION
+    // ==========================================
+    async function hashPin(pin, salt) {
+      const enc = new TextEncoder();
+      const data = enc.encode(`${salt}:${pin}`);
+      const hashBuf = await crypto.subtle.digest("SHA-256", data);
+      const hashArr = Array.from(new Uint8Array(hashBuf));
+      return hashArr.map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    function generateSalt() {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      return Array.from(bytes).map(b => b.toString(16).padStart(2, "0")).join("");
+    }
+
+    async function handleUnlock(event) {
+      if (event) event.preventDefault();
+      const pinInput = document.getElementById("pin-input");
+      const pin = pinInput.value.trim();
+      const errorEl = document.getElementById("unlock-error");
+      const btn = document.getElementById("unlock-btn");
+
+      if (!pin) return;
+      btn.disabled = true;
+      errorEl.style.display = "none";
+      initAudio(); // Initialize audio context on user gesture
+
+      try {
+        // Attempt online validation first
+        const res = await fetch(SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ pin: pin, action: "ping" }),
+          signal: AbortSignal.timeout(8000)
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+          // Success: cache salted hash for offline use
+          const salt = generateSalt();
+          const hash = await hashPin(pin, salt);
+          saveStorage("att.pinCheck", { salt, hash });
+
+          sessionPin = pin;
+          sessionStorage.setItem("att.pin", pin);
+          await refreshBootstrapOnline();
+          switchScreen("home");
+          return;
+        } else {
+          errorEl.textContent = "Incorrect PIN. Please try again.";
+          errorEl.style.display = "block";
+          btn.disabled = false;
+          return;
+        }
+      } catch (networkErr) {
+        console.warn("Online unlock failed, attempting offline validation:", networkErr);
+
+        // Fallback: validate against cached salted hash in localStorage
+        const pinCheck = loadStorage("att.pinCheck", null);
+        if (pinCheck && pinCheck.salt && pinCheck.hash) {
+          const computedHash = await hashPin(pin, pinCheck.salt);
+          if (computedHash === pinCheck.hash) {
+            sessionPin = pin;
+            sessionStorage.setItem("att.pin", pin);
+            loadBootstrapOffline();
+            switchScreen("home");
+            return;
+          }
+        }
+        errorEl.textContent = "Offline unlock failed: Connect online once to verify PIN.";
+        errorEl.style.display = "block";
+        btn.disabled = false;
+      }
+    }
+
+    // ==========================================
+    // 4. BOOTSTRAP & ROSTER MANAGEMENT
+    // ==========================================
+    async function refreshBootstrapOnline() {
+      const refreshBtn = document.getElementById("refresh-btn");
+      if (refreshBtn) refreshBtn.disabled = true;
+
+      try {
+        const res = await fetch(SCRIPT_URL, {
+          method: "POST",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify({ pin: sessionPin, action: "get_bootstrap" }),
+          signal: AbortSignal.timeout(10000)
+        });
+        const data = await res.json();
+
+        if (data.ok) {
+          const bootstrapData = {
+            courses: data.courses || [],
+            registry: data.registry || [],
+            fetchedAt: new Date().toISOString()
+          };
+          saveStorage("att.bootstrap", bootstrapData);
+          populateHomeView(bootstrapData);
+        }
+      } catch (err) {
+        console.warn("Could not refresh bootstrap online, loading cached:", err);
+        loadBootstrapOffline();
+      } finally {
+        if (refreshBtn) refreshBtn.disabled = false;
+      }
+    }
+
+    function loadBootstrapOffline() {
+      const bootstrap = loadStorage("att.bootstrap", { courses: ["General Course"], registry: [], fetchedAt: null });
+      populateHomeView(bootstrap);
+    }
+
+    function populateHomeView(bootstrap) {
+      const select = document.getElementById("course-select");
+      select.innerHTML = "";
+
+      const courses = (bootstrap.courses && bootstrap.courses.length > 0) 
+        ? bootstrap.courses 
+        : ["TEST COURSE"];
+
+      courses.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c;
+        opt.textContent = c;
+        select.appendChild(opt);
+      });
+
+      const regCount = (bootstrap.registry && bootstrap.registry.length) || 0;
+      document.getElementById("registry-count").textContent = `${regCount} students registered`;
+    }
+
+    // ==========================================
+    // 5. AUDIO & HAPTIC FEEDBACK
+    // ==========================================
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        if (AudioContextClass) audioCtx = new AudioContextClass();
+      }
+      if (audioCtx && audioCtx.state === "suspended") {
+        audioCtx.resume();
+      }
+    }
+
+    function playBeep(type) {
+      if (!audioCtx) return;
+      try {
+        const now = audioCtx.currentTime;
+        if (type === "present") {
+          // High clean beep: 880 Hz for 150ms
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(880, now);
+          gain.gain.setValueAtTime(0.3, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.15);
+        } else if (type === "duplicate") {
+          // Amber double beep: 440 Hz
+          [0, 0.12].forEach(offset => {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.type = "sine";
+            osc.frequency.setValueAtTime(440, now + offset);
+            gain.gain.setValueAtTime(0.25, now + offset);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + offset + 0.08);
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.start(now + offset);
+            osc.stop(now + offset + 0.08);
+          });
+        } else if (type === "unknown") {
+          // Low error buzz: 220 Hz for 400ms
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = "sawtooth";
+          osc.frequency.setValueAtTime(220, now);
+          gain.gain.setValueAtTime(0.25, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+          osc.connect(gain);
+          gain.connect(audioCtx.destination);
+          osc.start(now);
+          osc.stop(now + 0.4);
+        }
+      } catch (err) {
+        console.warn("Audio playback error:", err);
+      }
+    }
+
+    function triggerVibration(pattern) {
+      if ("vibrate" in navigator) {
+        try {
+          navigator.vibrate(pattern);
+        } catch (e) {}
+      }
+    }
+
+    // ==========================================
+    // 6. SCREEN WAKE LOCK
+    // ==========================================
+    async function requestWakeLock() {
+      if ("wakeLock" in navigator) {
+        try {
+          wakeLock = await navigator.wakeLock.request("screen");
+          wakeLock.addEventListener("release", () => {
+            wakeLock = null;
+          });
+        } catch (err) {
+          console.warn("Wake lock request failed:", err);
+        }
+      }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock) {
+        try {
+          wakeLock.release();
+        } catch (e) {}
+        wakeLock = null;
+      }
+    }
+
+    // ==========================================
+    // 7. WEB NFC SCANNING LOOP
+    // ==========================================
+    function normalizeUid(rawUid) {
+      if (!rawUid) return "";
+      return String(rawUid).trim().toLowerCase();
+    }
+
+    async function startNfcScan() {
+      if (!("NDEFReader" in window)) {
+        console.warn("Web NFC is not supported on this device/browser.");
+        return false;
+      }
+
+      try {
+        stopNfcScan();
+        nfcAbortController = new AbortController();
+        ndefReader = new NDEFReader();
+        await ndefReader.scan({ signal: nfcAbortController.signal });
+        isScanning = true;
+
+        ndefReader.onreading = (event) => {
+          onUid(event.serialNumber, "nfc");
+        };
+
+        ndefReader.onreadingerror = () => {
+          console.warn("NFC reading error (card held too briefly or unreadable)");
+        };
+
+        return true;
+      } catch (err) {
+        console.error("Start NFC scan error:", err);
+        isScanning = false;
+        return false;
+      }
+    }
+
+    function stopNfcScan() {
+      if (nfcAbortController) {
+        try {
+          nfcAbortController.abort();
+        } catch (e) {}
+        nfcAbortController = null;
+      }
+      ndefReader = null;
+      isScanning = false;
+    }
+
+    // ==========================================
+    // 8. SESSION & TAP FLOW (Local-First)
+    // ==========================================
+    function getAddisAbabaDateString(date = new Date()) {
+      const formatter = new Intl.DateTimeFormat("en-CA", {
+        timeZone: TIMEZONE,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit"
+      });
+      return formatter.format(date);
+    }
+
+    async function startSession() {
+      initAudio();
+      await requestWakeLock();
+
+      const courseSelect = document.getElementById("course-select");
+      const course = courseSelect.value || "General Course";
+      const dateStr = getAddisAbabaDateString();
+      const sessionKey = `${course}|${dateStr}`;
+
+      // Check if session already exists in localStorage (resume)
+      let sessions = loadStorage("att.sessions", []);
+      let sessionRecord = sessions.find(s => s.sessionKey === sessionKey);
+
+      if (!sessionRecord) {
+        sessionRecord = {
+          sessionKey: sessionKey,
+          course: course,
+          date: dateStr,
+          startedAt: new Date().toISOString(),
+          synced: false
+        };
+        sessions.push(sessionRecord);
+        saveStorage("att.sessions", sessions);
+      }
+
+      activeSession = sessionRecord;
+
+      // Update Session UI
+      document.getElementById("session-course-title").textContent = course;
+      document.getElementById("session-date-subtitle").textContent = dateStr;
+      
+      resetLastTapCard();
+      updateSessionCounter();
+      renderRecentTaps();
+
+      switchScreen("session");
+      await startNfcScan();
+    }
+
+    function endSession() {
+      stopNfcScan();
+      releaseWakeLock();
+      activeSession = null;
+      switchScreen("home");
+    }
+
+    function onUid(rawUid, source = "nfc") {
+      if (!activeSession) return;
+
+      const uid = normalizeUid(rawUid);
+      if (!uid) return;
+
+      // Debounce: ignore same UID read within 2000ms
+      const now = Date.now();
+      if (uid === lastSeenUid && (now - lastSeenTime) < 2000) {
+        return;
+      }
+      lastSeenUid = uid;
+      lastSeenTime = now;
+
+      const bootstrap = loadStorage("att.bootstrap", { registry: [] });
+      const registry = bootstrap.registry || [];
+      const student = registry.find(s => s.uid === uid);
+
+      const events = loadStorage("att.events", []);
+      const sessionKey = activeSession.sessionKey;
+
+      if (student) {
+        // Check if student is already present in this session
+        const alreadyPresent = events.some(e => 
+          e.sessionKey === sessionKey && 
+          e.studentId === student.studentId && 
+          e.localResult === "present"
+        );
+
+        if (alreadyPresent) {
+          // Duplicate tap
+          playBeep("duplicate");
+          triggerVibration([80, 50, 80]);
+          displayLastTap("duplicate", student.name, "Already Marked Present");
+        } else {
+          // New Present Tap: persist event first
+          const tapEvent = {
+            tapId: crypto.randomUUID(),
+            type: "tap",
+            sessionKey: sessionKey,
+            uid: uid,
+            studentId: student.studentId,
+            name: student.name,
+            reason: "",
+            tapTime: new Date().toISOString(),
+            localResult: "present",
+            synced: false
+          };
+
+          events.push(tapEvent);
+          if (saveStorage("att.events", events)) {
+            playBeep("present");
+            triggerVibration([120]);
+            displayLastTap("present", student.name, "Marked Present");
+            updateSessionCounter();
+            renderRecentTaps();
+          }
+        }
+      } else {
+        // Unknown UID
+        const alreadyLoggedUnknown = events.some(e => 
+          e.sessionKey === sessionKey && 
+          e.uid === uid && 
+          e.localResult === "unknown"
+        );
+
+        if (!alreadyLoggedUnknown) {
+          const unknownEvent = {
+            tapId: crypto.randomUUID(),
+            type: "tap",
+            sessionKey: sessionKey,
+            uid: uid,
+            studentId: "",
+            name: "",
+            reason: "",
+            tapTime: new Date().toISOString(),
+            localResult: "unknown",
+            synced: false
+          };
+          events.push(unknownEvent);
+          saveStorage("att.events", events);
+        }
+
+        playBeep("unknown");
+        triggerVibration([300]);
+        displayLastTap("unknown", "Card Not Registered", `UID: ${uid}`);
+        renderRecentTaps();
+      }
+    }
+
+    // ==========================================
+    // 9. UI RENDERING HELPERS
+    // ==========================================
+    function switchScreen(screenId) {
+      currentScreen = screenId;
+      document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
+      const target = document.getElementById(`screen-${screenId}`);
+      if (target) target.classList.add("active");
+    }
+
+    function resetLastTapCard() {
+      const card = document.getElementById("last-tap-card");
+      card.className = "last-tap-card card";
+      document.getElementById("tap-student-name").textContent = "Tap Card Now";
+      document.getElementById("tap-status-desc").textContent = "Hold ID against back of phone";
+    }
+
+    function displayLastTap(status, name, desc) {
+      const card = document.getElementById("last-tap-card");
+      card.className = `last-tap-card card ${status}`;
+      document.getElementById("tap-student-name").textContent = name;
+      document.getElementById("tap-status-desc").textContent = desc;
+    }
+
+    function updateSessionCounter() {
+      if (!activeSession) return;
+      const events = loadStorage("att.events", []);
+      const sessionKey = activeSession.sessionKey;
+
+      const presentStudentIds = new Set();
+      events.forEach(e => {
+        if (e.sessionKey === sessionKey && e.localResult === "present" && e.studentId) {
+          presentStudentIds.add(e.studentId);
+        }
+      });
+
+      const bootstrap = loadStorage("att.bootstrap", { registry: [] });
+      const totalCount = (bootstrap.registry && bootstrap.registry.length) || 0;
+
+      document.getElementById("counter-present").textContent = presentStudentIds.size;
+      document.getElementById("counter-total-label").textContent = `Present of ${totalCount} Students`;
+    }
+
+    function renderRecentTaps() {
+      if (!activeSession) return;
+      const events = loadStorage("att.events", []);
+      const sessionKey = activeSession.sessionKey;
+
+      const sessionEvents = events.filter(e => e.sessionKey === sessionKey);
+      const recent = sessionEvents.slice(-8).reverse();
+
+      const listEl = document.getElementById("recent-list");
+      document.getElementById("recent-count").textContent = `${sessionEvents.length} taps recorded`;
+
+      if (recent.length === 0) {
+        listEl.innerHTML = `<div style="text-align:center; color:var(--text-muted); font-size:0.85rem; padding:0.5rem;">No taps in this session yet</div>`;
+        return;
+      }
+
+      listEl.innerHTML = recent.map(e => {
+        const timeStr = e.tapTime ? new Date(e.tapTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "";
+        const displayName = e.name || (e.localResult === "unknown" ? `Unknown (${e.uid})` : "Manual Entry");
+        const statusBadge = e.localResult === "present"
+          ? `<span class="badge badge-success">Present</span>`
+          : (e.localResult === "unknown" ? `<span class="badge badge-danger">Unknown</span>` : `<span class="badge badge-warning">${e.localResult}</span>`);
+
+        return `
+          <div class="recent-item">
+            <div>
+              <div class="recent-item-name">${displayName}</div>
+              <div class="recent-item-meta">${timeStr} &bull; ${e.type}</div>
+            </div>
+            <div>${statusBadge}</div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function copyBackupToClipboard() {
+      const sessions = loadStorage("att.sessions", []);
+      const events = loadStorage("att.events", []);
+      const backupData = JSON.stringify({ sessions, events }, null, 2);
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(backupData).then(() => {
+          alert("Backup data copied to clipboard successfully!");
+        }).catch(() => {
+          promptFallbackBackup(backupData);
+        });
+      } else {
+        promptFallbackBackup(backupData);
+      }
+    }
+
+    function promptFallbackBackup(data) {
+      window.prompt("Copy your backup data below:", data);
+    }
+
+    // ==========================================
+    // 10. LIFECYCLE & VISIBILITY HANDLING
+    // ==========================================
+    document.addEventListener("visibilitychange", async () => {
+      if (currentScreen === "session") {
+        if (document.hidden) {
+          showPausedBanner(true);
+        } else {
+          showPausedBanner(false);
+          await requestWakeLock();
+          if (!isScanning) {
+            await startNfcScan();
+          }
+        }
+      }
+    });
+
+    // Auto-login if session PIN is already in memory
+    window.addEventListener("DOMContentLoaded", () => {
+      if (sessionPin) {
+        document.getElementById("pin-input").value = sessionPin;
+        loadBootstrapOffline();
+        switchScreen("home");
+      }
+    });
   </script>
 </body>
 </html>
