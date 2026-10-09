@@ -900,7 +900,7 @@
     // ==========================================
     // 1. CONFIGURATION & APP VERSION
     // ==========================================
-    const APP_VERSION = "1.3.0";
+    const APP_VERSION = "1.3.1";
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvvOJvmQdc7ZoxusT5x1VvajvrRRR_fuCIn5Hl5Zco_O_Ma_o6Y7tlSVad_cuuUr1w/exec";
     const TIMEZONE = "Africa/Addis_Ababa";
 
@@ -1032,7 +1032,12 @@
 
           sessionPin = pin;
           sessionStorage.setItem("att.pin", pin);
-          await refreshBootstrapOnline();
+          try {
+            await refreshBootstrapOnline();
+          } catch (e) {
+            console.warn("Bootstrap refresh error on unlock:", e);
+            loadBootstrapOffline();
+          }
           switchScreen("home");
           updateSyncBadges();
           // Non-blocking: prompt fingerprint registration after navigation
@@ -1290,39 +1295,40 @@
     }
 
     function autoSuggestScheduleOnLoad() {
-      const now = new Date();
-      // Addis Ababa Day of Week (0 = Sun, 1 = Mon, ..., 6 = Sat)
-      const dayFormatter = new Intl.DateTimeFormat("en-US", { timeZone: TIMEZONE, weekday: "numeric" });
-      // en-US with numeric weekday is not standard across all JS engines, use formatToParts
-      const parts = new Intl.DateTimeFormat("en-US", { timeZone: TIMEZONE, weekday: "short", hour: "numeric", hour12: false }).formatToParts(now);
-      const weekdayStr = parts.find(p => p.type === "weekday")?.value || "";
-      const hour = parseInt(parts.find(p => p.type === "hour")?.value || "0", 10);
+      try {
+        const now = new Date();
+        const parts = new Intl.DateTimeFormat("en-US", { timeZone: TIMEZONE, weekday: "short", hour: "numeric", hour12: false }).formatToParts(now);
+        const weekdayStr = (parts.find(p => p.type === "weekday")?.value || "").substring(0, 3);
+        const hour = parseInt(parts.find(p => p.type === "hour")?.value || "0", 10);
 
-      const dayMap = { "Mon": 1, "Tue": 2, "Wed": 3, "Thu": 4, "Fri": 5 };
-      const dayNum = dayMap[weekdayStr] || 0;
+        const dayMap = { "Mon": 1, "Tue": 2, "Wed": 3, "Thu": 4, "Fri": 5 };
+        const dayNum = dayMap[weekdayStr] || 0;
 
-      const courseSelect = document.getElementById("course-select");
-      const periodSelect = document.getElementById("period-select");
-      if (!courseSelect || !periodSelect || !SECTION_B_SCHEDULE[dayNum]) return;
+        const courseSelect = document.getElementById("course-select");
+        const periodSelect = document.getElementById("period-select");
+        if (!courseSelect || !periodSelect || !SECTION_B_SCHEDULE[dayNum]) return;
 
-      const todaySchedule = SECTION_B_SCHEDULE[dayNum];
-      let suggestedPeriod = "2:30 - 4:30";
-      if (hour >= 10 && hour < 14) {
-        suggestedPeriod = "4:30 - 6:30";
-      } else if (hour >= 14) {
-        suggestedPeriod = "7:30 - 9:20";
-      }
-
-      if (todaySchedule[suggestedPeriod]) {
-        const keyword = todaySchedule[suggestedPeriod].toLowerCase();
-        // Match keyword in courseSelect options
-        for (let i = 0; i < courseSelect.options.length; i++) {
-          if (courseSelect.options[i].text.toLowerCase().includes(keyword)) {
-            courseSelect.selectedIndex = i;
-            break;
-          }
+        const todaySchedule = SECTION_B_SCHEDULE[dayNum];
+        let suggestedPeriod = "2:30 - 4:30";
+        if (hour >= 10 && hour < 14) {
+          suggestedPeriod = "4:30 - 6:30";
+        } else if (hour >= 14) {
+          suggestedPeriod = "7:30 - 9:20";
         }
-        periodSelect.value = (suggestedPeriod === "7:30 - 9:20" && keyword.includes("electrical")) ? "Lab" : suggestedPeriod;
+
+        if (todaySchedule[suggestedPeriod]) {
+          const keyword = todaySchedule[suggestedPeriod].toLowerCase();
+          // Match keyword in courseSelect options
+          for (let i = 0; i < courseSelect.options.length; i++) {
+            if (courseSelect.options[i].text.toLowerCase().includes(keyword)) {
+              courseSelect.selectedIndex = i;
+              break;
+            }
+          }
+          periodSelect.value = (suggestedPeriod === "7:30 - 9:20" && keyword.includes("electrical")) ? "Lab" : suggestedPeriod;
+        }
+      } catch (e) {
+        console.warn("Auto-suggest schedule error:", e);
       }
     }
 
