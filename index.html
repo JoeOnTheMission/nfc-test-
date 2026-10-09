@@ -6,33 +6,106 @@
   <title>Tap-to-Attend</title>
   <link rel="manifest" href="./manifest.webmanifest">
   <style>
+    /* ============================================================ */
+    /* CSS THEME VARIABLES (DARK CYBER vs FROSTED ICE-LIGHT GLASS)  */
+    /* ============================================================ */
     :root {
-      --bg: #0f172a;
-      --card-bg: #1e293b;
-      --card-border: #334155;
-      --text: #f8fafc;
-      --text-muted: #94a3b8;
-      --accent: #38bdf8;
-      --accent-hover: #0284c7;
+      /* DARK CYBER THEME (DEFAULT) */
+      --bg: #020612;
+      --card-bg: rgba(6, 18, 38, 0.72);
+      --card-border: rgba(0, 240, 255, 0.28);
+      --card-border-top: rgba(255, 255, 255, 0.28);
+      --card-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.6);
+      
+      --text: #f0f9ff;
+      --text-secondary: #7dd3fc;
+      --text-muted: #64748b;
+      
+      --accent: #00f0ff;
+      --accent-blue: #0284c7;
+      --accent-gradient: linear-gradient(135deg, #0284c7 0%, #00f0ff 100%);
+      --btn-text: #020617;
+      --btn-shadow: 0 0 20px rgba(0, 240, 255, 0.35);
+
       --green: #22c55e;
       --green-bg: rgba(34, 197, 94, 0.15);
-      --green-border: rgba(34, 197, 94, 0.35);
+      --green-border: rgba(34, 197, 94, 0.4);
       --amber: #f59e0b;
       --amber-bg: rgba(245, 158, 11, 0.15);
       --amber-border: rgba(245, 158, 11, 0.35);
       --red: #ef4444;
       --red-bg: rgba(239, 68, 68, 0.15);
       --red-border: rgba(239, 68, 68, 0.35);
-      --radius: 12px;
+
+      --circuit-stroke-1: #00f0ff;
+      --circuit-stroke-2: #0284c7;
+      --circuit-opacity: 0.42;
+      --grid-color: rgba(0, 240, 255, 0.04);
+      
+      --select-bg: #09152b;
+      --select-border: #00f0ff;
+      --select-text: #ffffff;
+      --select-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+      --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2300f0ff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      --option-bg: #030816;
+      --input-bg: rgba(3, 12, 28, 0.8);
+      --input-border: rgba(0, 240, 255, 0.3);
+
+      --radius: 18px;
     }
+
+    /* FROSTED ICE-LIGHT GLASS THEME OVERRIDES */
+    body.theme-light {
+      --bg: #cbd5e1;
+      --card-bg: rgba(255, 255, 255, 0.7);
+      --card-border: rgba(255, 255, 255, 0.85);
+      --card-border-top: rgba(255, 255, 255, 0.95);
+      --card-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.12), inset 0 0 15px rgba(255, 255, 255, 0.4);
+      
+      --text: #0f172a;
+      --text-secondary: #0284c7;
+      --text-muted: #475569;
+      
+      --accent: #0284c7;
+      --accent-blue: #0284c7;
+      --accent-gradient: linear-gradient(135deg, #0284c7 0%, #38bdf8 100%);
+      --btn-text: #ffffff;
+      --btn-shadow: 0 4px 15px rgba(2, 132, 199, 0.35);
+
+      --green: #16a34a;
+      --green-bg: rgba(34, 197, 94, 0.15);
+      --green-border: rgba(34, 197, 94, 0.35);
+      --amber: #d97706;
+      --amber-bg: rgba(245, 158, 11, 0.12);
+      --amber-border: rgba(245, 158, 11, 0.35);
+      --red: #dc2626;
+      --red-bg: rgba(239, 68, 68, 0.12);
+      --red-border: rgba(239, 68, 68, 0.35);
+
+      --circuit-stroke-1: #0284c7;
+      --circuit-stroke-2: #6366f1;
+      --circuit-opacity: 0.3;
+      --grid-color: rgba(2, 132, 199, 0.07);
+
+      --select-bg: #ffffff;
+      --select-border: #0284c7;
+      --select-text: #0f172a;
+      --select-shadow: 0 4px 12px rgba(2, 132, 199, 0.15);
+      --select-arrow: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230284c7' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+      --option-bg: #ffffff;
+      --input-bg: rgba(255, 255, 255, 0.7);
+      --input-border: rgba(148, 163, 184, 0.6);
+    }
+
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
       -webkit-tap-highlight-color: transparent;
+      transition: background 0.25s ease, color 0.25s ease, border-color 0.25s ease, box-shadow 0.25s ease;
     }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Oxygen, Ubuntu, Cantarell, sans-serif;
       background-color: var(--bg);
       color: var(--text);
       min-height: 100vh;
@@ -41,34 +114,104 @@
       align-items: center;
       justify-content: space-between;
       padding: 1rem;
+      position: relative;
+      overflow-x: hidden;
     }
+
+    /* Ambient Background Grid Pattern */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image: 
+        radial-gradient(circle at 50% 15%, rgba(0, 240, 255, 0.12) 0%, transparent 45%),
+        radial-gradient(circle at 80% 70%, rgba(0, 119, 254, 0.1) 0%, transparent 40%),
+        linear-gradient(var(--grid-color) 1px, transparent 1px),
+        linear-gradient(90deg, var(--grid-color) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 25px 25px, 25px 25px;
+      pointer-events: none;
+      z-index: -2;
+    }
+
+    /* Dense PCB Circuit Board Background Overlay */
+    .circuit-bg-svg {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      opacity: var(--circuit-opacity);
+      pointer-events: none;
+      z-index: -1;
+    }
+
     .app-container {
       width: 100%;
       max-width: 480px;
       display: flex;
       flex-direction: column;
       gap: 1rem;
+      position: relative;
+      z-index: 1;
     }
     header {
       text-align: center;
-      padding: 0.5rem 0;
+      padding: 0.4rem 0;
+      position: relative;
     }
-    h1 {
-      font-size: 1.6rem;
+
+    /* Top Control Bar with Theme Switcher */
+    .theme-toggle-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.5rem;
+      padding: 0.35rem 0.75rem;
+      background: var(--card-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--card-border);
+      border-radius: 999px;
+    }
+    .theme-toggle-btn {
+      width: auto;
+      background: transparent;
+      border: none;
+      padding: 0.2rem 0.5rem;
+      color: var(--text-secondary);
+      font-size: 0.78rem;
       font-weight: 700;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 800;
       color: var(--text);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
     }
     .subtitle {
-      color: var(--text-muted);
-      font-size: 0.85rem;
+      color: var(--text-secondary);
+      font-size: 0.78rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: 600;
       margin-top: 0.2rem;
     }
+
+    /* Frosted Glass Floating Card */
     .card {
-      background-color: var(--card-bg);
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
       border: 1px solid var(--card-border);
+      border-top: 1px solid var(--card-border-top);
       border-radius: var(--radius);
       padding: 1.25rem;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      box-shadow: var(--card-shadow);
     }
     .screen {
       display: none;
@@ -80,11 +223,12 @@
     }
     .banner {
       padding: 0.75rem 1rem;
-      border-radius: 8px;
-      font-size: 0.9rem;
-      font-weight: 600;
+      border-radius: 12px;
+      font-size: 0.88rem;
+      font-weight: 700;
       text-align: center;
       display: none;
+      backdrop-filter: blur(12px);
     }
     .banner-danger {
       background-color: var(--red-bg);
@@ -100,77 +244,124 @@
       display: block;
     }
     label {
-      font-size: 0.85rem;
-      font-weight: 600;
-      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-weight: 800;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
       display: block;
       margin-bottom: 0.4rem;
     }
     input[type="password"],
-    input[type="text"],
-    select {
+    input[type="text"] {
       width: 100%;
-      padding: 0.85rem 1rem;
-      background-color: #0f172a;
-      border: 1px solid var(--card-border);
-      border-radius: 8px;
+      padding: 0.8rem 1rem;
+      background-color: var(--input-bg);
+      border: 1px solid var(--input-border);
+      border-radius: 12px;
       color: var(--text);
-      font-size: 1rem;
+      font-size: 0.95rem;
+      font-weight: 600;
       outline: none;
-      transition: border-color 0.15s ease;
+      backdrop-filter: blur(12px);
+      transition: border-color 0.15s ease, box-shadow 0.15s ease;
     }
-    input:focus, select:focus {
+    input:focus {
       border-color: var(--accent);
+      box-shadow: 0 0 12px var(--accent);
     }
+
+    /* Custom High-Contrast Subject Dropdown */
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      width: 100%;
+      background-color: var(--select-bg);
+      background-image: var(--select-arrow);
+      background-repeat: no-repeat;
+      background-position: right 0.85rem center;
+      background-size: 16px 16px;
+      border: 2px solid var(--select-border);
+      border-radius: 12px;
+      padding: 0.8rem 2.2rem 0.8rem 0.95rem;
+      color: var(--select-text);
+      font-size: 0.88rem;
+      font-weight: 700;
+      outline: none;
+      cursor: pointer;
+      box-shadow: var(--select-shadow);
+      transition: all 0.2s ease;
+    }
+    select:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 16px var(--accent);
+    }
+    select option {
+      background-color: var(--option-bg);
+      color: var(--select-text);
+      font-weight: 600;
+      padding: 0.75rem;
+    }
+
     button {
       width: 100%;
-      padding: 0.9rem 1.25rem;
-      background-color: var(--accent);
-      color: #0f172a;
+      padding: 0.85rem 1.25rem;
+      background: var(--accent-gradient);
+      color: var(--btn-text);
       border: none;
-      border-radius: 8px;
-      font-size: 1rem;
-      font-weight: 700;
+      border-radius: 14px;
+      font-size: 0.92rem;
+      font-weight: 800;
       cursor: pointer;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 0.5rem;
-      transition: opacity 0.15s ease;
+      box-shadow: var(--btn-shadow);
+      letter-spacing: 0.03em;
+      transition: opacity 0.15s ease, transform 0.15s ease;
     }
     button:active {
       opacity: 0.85;
+      transform: scale(0.98);
     }
     button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+      box-shadow: none;
     }
     .btn-secondary {
-      background-color: transparent;
-      color: var(--text-muted);
+      background: rgba(0, 0, 0, 0.2);
+      color: var(--text);
       border: 1px solid var(--card-border);
+      box-shadow: none;
+      font-weight: 700;
+    }
+    body.theme-light .btn-secondary {
+      background: rgba(255, 255, 255, 0.75);
     }
     .btn-secondary:active {
-      background-color: rgba(255, 255, 255, 0.05);
-      color: var(--text);
+      background-color: rgba(255, 255, 255, 0.1);
     }
     .btn-danger {
-      background-color: var(--red-bg);
+      background: var(--red-bg);
       color: var(--red);
       border: 1px solid var(--red-border);
+      box-shadow: none;
     }
     .badge {
       display: inline-flex;
       align-items: center;
-      padding: 0.25rem 0.6rem;
+      padding: 0.25rem 0.65rem;
       border-radius: 9999px;
-      font-size: 0.75rem;
-      font-weight: 600;
+      font-size: 0.72rem;
+      font-weight: 700;
     }
     .badge-info {
-      background-color: rgba(56, 189, 248, 0.15);
+      background-color: rgba(0, 240, 255, 0.12);
       color: var(--accent);
-      border: 1px solid rgba(56, 189, 248, 0.3);
+      border: 1px solid rgba(0, 240, 255, 0.35);
     }
     .badge-success {
       background-color: var(--green-bg);
@@ -196,31 +387,34 @@
     }
     .counter-display {
       text-align: center;
-      padding: 1rem 0;
+      padding: 0.8rem 0;
     }
     .counter-number {
-      font-size: 3rem;
-      font-weight: 800;
+      font-size: 3.2rem;
+      font-weight: 900;
       color: var(--accent);
       line-height: 1;
     }
     .counter-label {
-      font-size: 0.85rem;
+      font-size: 0.78rem;
       color: var(--text-muted);
       text-transform: uppercase;
-      letter-spacing: 0.05em;
+      letter-spacing: 0.08em;
+      font-weight: 700;
       margin-top: 0.25rem;
     }
     .last-tap-card {
-      padding: 1.5rem 1rem;
+      padding: 1.25rem 1rem;
       text-align: center;
       border-radius: var(--radius);
       border: 2px dashed var(--card-border);
-      min-height: 140px;
+      min-height: 130px;
       display: flex;
       flex-direction: column;
       justify-content: center;
       align-items: center;
+      background: var(--card-bg);
+      backdrop-filter: blur(20px);
       transition: all 0.2s ease;
     }
     .last-tap-card.present {
@@ -239,14 +433,14 @@
       color: var(--red);
     }
     .tap-student-name {
-      font-size: 1.75rem;
-      font-weight: 800;
+      font-size: 1.6rem;
+      font-weight: 900;
       word-break: break-word;
       line-height: 1.2;
     }
     .tap-status-desc {
-      font-size: 0.95rem;
-      font-weight: 600;
+      font-size: 0.85rem;
+      font-weight: 700;
       margin-top: 0.35rem;
     }
     .recent-list {
@@ -259,13 +453,13 @@
       justify-content: space-between;
       align-items: center;
       padding: 0.6rem 0.75rem;
-      background-color: #0f172a;
+      background-color: var(--input-bg);
       border: 1px solid var(--card-border);
-      border-radius: 8px;
+      border-radius: 10px;
       font-size: 0.85rem;
     }
     .recent-item-name {
-      font-weight: 600;
+      font-weight: 700;
       max-width: 200px;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -281,36 +475,33 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 0.85rem 1rem;
-      background-color: #0f172a;
+      padding: 0.75rem 0.9rem;
+      background-color: var(--input-bg);
       border: 1px solid var(--card-border);
-      border-radius: 8px;
+      border-radius: 10px;
       cursor: pointer;
       transition: border-color 0.15s ease;
     }
     .student-item:active {
       border-color: var(--accent);
-      background-color: rgba(56, 189, 248, 0.05);
+      background-color: rgba(0, 240, 255, 0.08);
     }
     .student-item-name {
       font-weight: 700;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
     }
     .student-item-id {
-      color: var(--text-muted);
-      font-size: 0.8rem;
+      color: var(--text-secondary);
+      font-size: 0.78rem;
     }
 
     /* Modal Overlay Styles */
     .modal-overlay {
       display: none;
       position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: rgba(15, 23, 42, 0.85);
-      backdrop-filter: blur(4px);
+      inset: 0;
+      background-color: rgba(2, 6, 18, 0.8);
+      backdrop-filter: blur(8px);
       z-index: 1000;
       align-items: center;
       justify-content: center;
@@ -321,6 +512,8 @@
     }
     .modal-card {
       background-color: var(--card-bg);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
       border: 1px solid var(--card-border);
       border-radius: var(--radius);
       width: 100%;
@@ -328,7 +521,7 @@
       max-height: 90vh;
       display: flex;
       flex-direction: column;
-      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.7);
       overflow: hidden;
     }
     .modal-header {
@@ -353,23 +546,23 @@
     .chip {
       padding: 0.35rem 0.65rem;
       font-size: 0.75rem;
-      background-color: #0f172a;
+      font-weight: 700;
+      background-color: var(--input-bg);
       border: 1px solid var(--card-border);
       border-radius: 9999px;
-      color: var(--text-muted);
+      color: var(--text-secondary);
       cursor: pointer;
-      transition: all 0.15s ease;
       width: auto;
     }
     .chip:active {
-      background-color: rgba(56, 189, 248, 0.15);
-      color: var(--accent);
+      background-color: var(--accent);
+      color: var(--btn-text);
       border-color: var(--accent);
     }
     .selected-student-box {
-      background-color: #0f172a;
+      background-color: var(--input-bg);
       border: 1px solid var(--accent);
-      border-radius: 8px;
+      border-radius: 10px;
       padding: 0.75rem 1rem;
       display: flex;
       justify-content: space-between;
@@ -384,11 +577,44 @@
       border-top: 1px solid var(--card-border);
       color: var(--text-muted);
       font-size: 0.8rem;
+      position: relative;
+      z-index: 1;
     }
   </style>
 </head>
 <body>
+  <!-- Ambient Electromechanical Circuit Board Vector Background -->
+  <svg class="circuit-bg-svg" viewBox="0 0 1200 1200" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <rect x="80" y="80" width="70" height="70" rx="6" stroke="var(--circuit-stroke-1)" stroke-width="1.5" fill="none"/>
+    <rect x="95" y="95" width="40" height="40" rx="3" stroke="var(--circuit-stroke-1)" stroke-width="0.8" fill="none"/>
+    <path d="M150,100 L300,100 L360,160 L580,160" stroke="var(--circuit-stroke-1)" stroke-width="1.5"/>
+    <circle cx="580" cy="160" r="4" fill="var(--circuit-stroke-1)"/>
+    <path d="M150,130 L260,130 L320,190 L480,190" stroke="var(--circuit-stroke-2)" stroke-width="1.2"/>
+    <circle cx="480" cy="190" r="3" fill="var(--circuit-stroke-2)"/>
+    <path d="M115,150 L115,280 L200,365 L200,480" stroke="var(--circuit-stroke-1)" stroke-width="1.2" stroke-dasharray="6,4"/>
+    <circle cx="200" cy="480" r="3.5" fill="var(--circuit-stroke-1)"/>
+    <path d="M400,0 L400,80 L520,200 L900,200 L980,280 L1200,280" stroke="var(--circuit-stroke-1)" stroke-width="1.2"/>
+    <circle cx="900" cy="200" r="3.5" fill="var(--circuit-stroke-1)"/>
+    <rect x="980" y="450" width="80" height="80" rx="8" stroke="var(--circuit-stroke-1)" stroke-width="1.5" fill="none"/>
+    <path d="M980,480 L780,480 L710,550 L480,550" stroke="var(--circuit-stroke-1)" stroke-width="1.5"/>
+    <circle cx="480" cy="550" r="5" fill="var(--circuit-stroke-1)"/>
+    <path d="M0,750 L180,750 L270,840 L500,840 L580,920 L920,920" stroke="var(--circuit-stroke-1)" stroke-width="1.5" stroke-dasharray="8,5"/>
+    <circle cx="920" cy="920" r="4" fill="var(--circuit-stroke-1)"/>
+    <path d="M120,1200 L120,980 L240,860 L420,860" stroke="var(--circuit-stroke-2)" stroke-width="1.2"/>
+    <circle cx="420" cy="860" r="3" fill="var(--circuit-stroke-2)"/>
+    <path d="M700,1200 L700,1050 L820,930 L1100,930" stroke="var(--circuit-stroke-1)" stroke-width="1.2"/>
+    <circle cx="1100" cy="930" r="4" fill="var(--circuit-stroke-1)"/>
+  </svg>
+
   <div class="app-container">
+    <!-- Top Bar with Theme Toggle -->
+    <div class="theme-toggle-bar">
+      <span style="font-size: 0.75rem; font-weight: 800; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.08em;">⚡ AASTU &bull; EMEg</span>
+      <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="toggleAppTheme()">
+        <span id="theme-icon">🌙</span> <span id="theme-text">Dark</span>
+      </button>
+    </div>
+
     <header>
       <h1>Tap-to-Attend</h1>
       <p class="subtitle">AASTU Attendance System</p>
@@ -413,11 +639,10 @@
 
       <!-- Biometric section (shown when fingerprint is registered) -->
       <div id="biometric-section" style="display: none; flex-direction: column; align-items: center; gap: 0.75rem; padding: 0.5rem 0;">
-        <button type="button" id="biometric-btn" onclick="handleBiometricUnlock()" style="background: linear-gradient(135deg, #0ea5e9, #6366f1); font-size: 1.05rem; letter-spacing: 0.02em;">
-          <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 11c0-1.1.9-2 2-2s2 .9 2 2v1M6 13c0-3.3 2.7-6 6-6s6 2.7 6 6v1M3 15c0-5 4-9 9-9s9 4 9 9M3 19c0-7.2 4-13 9-13s9 5.8 9 13"/></svg>
+        <button type="button" id="biometric-btn" onclick="handleBiometricUnlock()">
           Unlock with Fingerprint
         </button>
-        <button type="button" onclick="showPinFallback()" style="width: auto; background: transparent; color: var(--text-muted); border: none; font-size: 0.8rem; padding: 0.1rem; font-weight: 400; text-decoration: underline;">Use PIN instead</button>
+        <button type="button" onclick="showPinFallback()" style="width: auto; background: transparent; color: var(--text-muted); border: none; font-size: 0.8rem; padding: 0.1rem; font-weight: 600; text-decoration: underline;">Use PIN instead</button>
       </div>
 
       <!-- PIN form (always present, hidden behind biometric by default) -->
@@ -440,12 +665,12 @@
       </div>
 
       <div>
-        <label for="course-select">Select Course</label>
+        <label for="course-select">📚 Select Subject</label>
         <select id="course-select"></select>
       </div>
 
       <button id="start-session-btn" onclick="startSession()">
-        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+        <svg width="20" height="20" fill="currentColor" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
         Start Session
       </button>
 
@@ -657,7 +882,7 @@
     // ==========================================
     // 1. CONFIGURATION & APP VERSION
     // ==========================================
-    const APP_VERSION = "1.1.0";
+    const APP_VERSION = "1.2.0";
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvvOJvmQdc7ZoxusT5x1VvajvrRRR_fuCIn5Hl5Zco_O_Ma_o6Y7tlSVad_cuuUr1w/exec";
     const TIMEZONE = "Africa/Addis_Ababa";
 
@@ -932,7 +1157,7 @@
         const freshBtn = document.getElementById("biometric-btn");
         if (freshBtn) {
           freshBtn.disabled = false;
-          freshBtn.innerHTML = `<svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 11c0-1.1.9-2 2-2s2 .9 2 2v1M6 13c0-3.3 2.7-6 6-6s6 2.7 6 6v1M3 15c0-5 4-9 9-9s9 4 9 9M3 19c0-7.2 4-13 9-13s9 5.8 9 13"/></svg> Unlock with Fingerprint`;
+          freshBtn.textContent = "Unlock with Fingerprint";
         }
       }
     }
@@ -2026,7 +2251,34 @@
       });
     }
 
+    // ==========================================
+    // 14. THEME TOGGLE (DARK CYBER vs LIGHT GLASS)
+    // ==========================================
+    const THEME_STORAGE_KEY = "att.theme";
+
+    function applyAppTheme(theme) {
+      const isLight = theme === "light";
+      document.body.classList.toggle("theme-light", isLight);
+      const icon = document.getElementById("theme-icon");
+      const text = document.getElementById("theme-text");
+      if (icon && text) {
+        icon.textContent = isLight ? "☀️" : "🌙";
+        text.textContent = isLight ? "Light" : "Dark";
+      }
+      saveStorage(THEME_STORAGE_KEY, theme);
+    }
+
+    function toggleAppTheme() {
+      const currentTheme = document.body.classList.contains("theme-light") ? "light" : "dark";
+      const newTheme = currentTheme === "light" ? "dark" : "light";
+      applyAppTheme(newTheme);
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
+      // Initialize saved theme (default dark)
+      const savedTheme = loadStorage(THEME_STORAGE_KEY, "dark");
+      applyAppTheme(savedTheme);
+
       if (sessionPin) {
         document.getElementById("pin-input").value = sessionPin;
         loadBootstrapOffline();
