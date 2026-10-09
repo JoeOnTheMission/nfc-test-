@@ -276,7 +276,7 @@
       font-size: 0.75rem;
     }
 
-    /* Student Registration List Styles */
+    /* Student Registration & Modal List Styles */
     .student-item {
       display: flex;
       justify-content: space-between;
@@ -300,6 +300,82 @@
       color: var(--text-muted);
       font-size: 0.8rem;
     }
+
+    /* Modal Overlay Styles */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(4px);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+    .modal-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      width: 100%;
+      max-width: 440px;
+      max-height: 90vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .modal-body {
+      padding: 1.25rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      overflow-y: auto;
+    }
+    .reason-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.4rem;
+    }
+    .chip {
+      padding: 0.35rem 0.65rem;
+      font-size: 0.75rem;
+      background-color: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 9999px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      width: auto;
+    }
+    .chip:active {
+      background-color: rgba(56, 189, 248, 0.15);
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+    .selected-student-box {
+      background-color: #0f172a;
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
     footer {
       width: 100%;
       max-width: 480px;
@@ -414,6 +490,11 @@
         <div id="tap-status-desc" class="tap-status-desc">Hold ID against back of phone</div>
       </div>
 
+      <!-- Manual Attendance Button -->
+      <button onclick="openManualOverrideModal()" class="btn-secondary" style="font-size: 0.95rem; font-weight: 700; color: var(--accent); border-color: rgba(56, 189, 248, 0.4); padding: 0.85rem;">
+        ✍️ Manual Override (No Card)
+      </button>
+
       <!-- Recent Taps List -->
       <div class="card">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
@@ -447,6 +528,58 @@
         <button class="btn-danger" onclick="endSession()">
           End Session
         </button>
+      </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- MODAL: MANUAL OVERRIDE (Step 7)            -->
+    <!-- ========================================== -->
+    <div id="modal-manual-override" class="modal-overlay">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3 style="font-size: 1.15rem; font-weight: 700;">✍️ Manual Attendance</h3>
+          <button onclick="closeManualOverrideModal()" style="width: auto; padding: 0.2rem 0.5rem; background: transparent; color: var(--text-muted); font-size: 1.2rem; border: none;">✕</button>
+        </div>
+        <div class="modal-body">
+          <!-- Step 1: Student Search / Picker -->
+          <div id="manual-picker-section">
+            <label for="manual-search-input">Select Student</label>
+            <input type="text" id="manual-search-input" oninput="renderManualStudentList()" placeholder="🔍 Search student name or ID..." style="margin-bottom: 0.5rem;">
+            
+            <div id="manual-student-list" style="display: flex; flex-direction: column; gap: 0.4rem; max-height: 200px; overflow-y: auto; border: 1px solid var(--card-border); border-radius: 8px; padding: 0.4rem; background: #0f172a;">
+              <!-- Populated by JS -->
+            </div>
+          </div>
+
+          <!-- Step 2: Selected Student Display -->
+          <div id="manual-selected-display" style="display: none;">
+            <label>Selected Student</label>
+            <div class="selected-student-box">
+              <div>
+                <div id="manual-selected-name" style="font-weight: 700; font-size: 1rem; color: var(--text);">Student Name</div>
+                <div id="manual-selected-id" style="font-size: 0.8rem; color: var(--accent);">ID: TEST001</div>
+              </div>
+              <button type="button" onclick="clearSelectedManualStudent()" class="btn-secondary" style="width: auto; padding: 0.25rem 0.5rem; font-size: 0.75rem;">Change</button>
+            </div>
+          </div>
+
+          <!-- Step 3: Reason & Quick Chips -->
+          <div>
+            <label for="manual-reason-input">Reason (Required, min 3 chars)</label>
+            <div class="reason-chips" style="margin-bottom: 0.5rem;">
+              <button type="button" class="chip" onclick="setManualReason('Card forgotten')">Card forgotten</button>
+              <button type="button" class="chip" onclick="setManualReason('Broken / Damaged card')">Broken card</button>
+              <button type="button" class="chip" onclick="setManualReason('Phone / NFC issue')">Phone / NFC issue</button>
+              <button type="button" class="chip" onclick="setManualReason('Card not issued yet')">No card yet</button>
+            </div>
+            <input type="text" id="manual-reason-input" oninput="validateManualForm()" placeholder="e.g. Card forgotten at home" maxlength="100">
+          </div>
+
+          <div style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+            <button type="button" class="btn-secondary" onclick="closeManualOverrideModal()">Cancel</button>
+            <button type="button" id="manual-submit-btn" onclick="submitManualOverride()" disabled style="background-color: var(--green); color: #0f172a;">Mark Present</button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -503,7 +636,7 @@
   <footer>
     <div style="display: flex; flex-direction: column; align-items: center; gap: 0.35rem;">
       <div><span id="offline-ready-badge" class="badge badge-success" style="display: none; font-size: 0.75rem;">✓ Ready for offline use</span></div>
-      <div>Tap-to-Attend &bull; <span id="app-version">v0.4.0</span></div>
+      <div>Tap-to-Attend &bull; <span id="app-version">v0.5.0</span></div>
     </div>
   </footer>
 
@@ -511,7 +644,7 @@
     // ==========================================
     // 1. CONFIGURATION & APP VERSION
     // ==========================================
-    const APP_VERSION = "0.4.0";
+    const APP_VERSION = "0.5.0";
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvvOJvmQdc7ZoxusT5x1VvajvrRRR_fuCIn5Hl5Zco_O_Ma_o6Y7tlSVad_cuuUr1w/exec";
     const TIMEZONE = "Africa/Addis_Ababa";
 
@@ -527,6 +660,9 @@
     // Registration state
     let regFilter = "unregistered";
     let regTargetStudent = null;
+
+    // Manual override state
+    let manualSelectedStudent = null;
 
     // Web NFC & Audio & WakeLock state
     let ndefReader = null;
@@ -1043,7 +1179,161 @@
     }
 
     // ==========================================
-    // 9. REGISTRATION MODE (Online Supervised)
+    // 9. MANUAL OVERRIDE (Step 7)
+    // ==========================================
+    function openManualOverrideModal() {
+      if (!activeSession) return;
+      initAudio();
+      manualSelectedStudent = null;
+      document.getElementById("manual-search-input").value = "";
+      document.getElementById("manual-reason-input").value = "";
+      document.getElementById("manual-selected-display").style.display = "none";
+      document.getElementById("manual-picker-section").style.display = "block";
+      renderManualStudentList();
+      validateManualForm();
+      document.getElementById("modal-manual-override").classList.add("active");
+    }
+
+    function closeManualOverrideModal() {
+      document.getElementById("modal-manual-override").classList.remove("active");
+      manualSelectedStudent = null;
+    }
+
+    function renderManualStudentList() {
+      const search = (document.getElementById("manual-search-input").value || "").toLowerCase().trim();
+      const listEl = document.getElementById("manual-student-list");
+      const bootstrap = loadStorage("att.bootstrap", { registry: [] });
+      const registry = bootstrap.registry || [];
+      
+      const events = loadStorage("att.events", []);
+      const sessionKey = activeSession ? activeSession.sessionKey : "";
+      
+      const presentStudentIds = new Set();
+      events.forEach(e => {
+        if (e.sessionKey === sessionKey && e.localResult === "present" && e.studentId) {
+          presentStudentIds.add(e.studentId);
+        }
+      });
+
+      const filtered = registry.filter(s => {
+        return s.name.toLowerCase().includes(search) || s.studentId.toLowerCase().includes(search);
+      });
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = `<div style="text-align: center; color: var(--text-muted); font-size: 0.8rem; padding: 1rem;">No students found in registry</div>`;
+        return;
+      }
+
+      listEl.innerHTML = filtered.map(s => {
+        const isPresent = presentStudentIds.has(s.studentId);
+        const badge = isPresent 
+          ? `<span class="badge badge-success" style="font-size:0.7rem;">Present</span>` 
+          : `<span class="badge badge-info" style="font-size:0.7rem;">Select</span>`;
+
+        const opacityStyle = isPresent ? "opacity: 0.6;" : "cursor: pointer;";
+
+        return `
+          <div class="student-item" style="padding: 0.6rem 0.8rem; ${opacityStyle}" onclick="selectManualStudent('${s.studentId}', ${isPresent})">
+            <div>
+              <div class="student-item-name" style="font-size: 0.9rem;">${s.name}</div>
+              <div class="student-item-id" style="font-size: 0.75rem;">ID: ${s.studentId}</div>
+            </div>
+            <div>${badge}</div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function selectManualStudent(studentId, isAlreadyPresent) {
+      if (isAlreadyPresent) {
+        if (!confirm("This student is already marked present in this session. Do you still want to proceed?")) {
+          return;
+        }
+      }
+
+      const bootstrap = loadStorage("att.bootstrap", { registry: [] });
+      const student = (bootstrap.registry || []).find(s => s.studentId === studentId);
+      if (!student) return;
+
+      manualSelectedStudent = student;
+      document.getElementById("manual-selected-name").textContent = student.name;
+      document.getElementById("manual-selected-id").textContent = `ID: ${student.studentId}`;
+      document.getElementById("manual-picker-section").style.display = "none";
+      document.getElementById("manual-selected-display").style.display = "block";
+      validateManualForm();
+    }
+
+    function clearSelectedManualStudent() {
+      manualSelectedStudent = null;
+      document.getElementById("manual-selected-display").style.display = "none";
+      document.getElementById("manual-picker-section").style.display = "block";
+      renderManualStudentList();
+      validateManualForm();
+    }
+
+    function setManualReason(reasonText) {
+      const input = document.getElementById("manual-reason-input");
+      input.value = reasonText;
+      validateManualForm();
+    }
+
+    function validateManualForm() {
+      const reason = (document.getElementById("manual-reason-input").value || "").trim();
+      const submitBtn = document.getElementById("manual-submit-btn");
+      const isValid = !!manualSelectedStudent && reason.length >= 3;
+      submitBtn.disabled = !isValid;
+    }
+
+    function submitManualOverride() {
+      if (!activeSession || !manualSelectedStudent) return;
+      const reason = (document.getElementById("manual-reason-input").value || "").trim();
+      if (reason.length < 3) return;
+
+      const student = manualSelectedStudent;
+      const events = loadStorage("att.events", []);
+      const sessionKey = activeSession.sessionKey;
+
+      const alreadyPresent = events.some(e => 
+        e.sessionKey === sessionKey && 
+        e.studentId === student.studentId && 
+        e.localResult === "present"
+      );
+
+      if (alreadyPresent) {
+        playBeep("duplicate");
+        triggerVibration([80, 50, 80]);
+        displayLastTap("duplicate", student.name, "Already Marked Present");
+        closeManualOverrideModal();
+        return;
+      }
+
+      const manualEvent = {
+        tapId: crypto.randomUUID(),
+        type: "manual",
+        sessionKey: sessionKey,
+        uid: "",
+        studentId: student.studentId,
+        name: student.name,
+        reason: reason,
+        tapTime: new Date().toISOString(),
+        localResult: "present",
+        synced: false
+      };
+
+      events.push(manualEvent);
+      if (saveStorage("att.events", events)) {
+        playBeep("present");
+        triggerVibration([120]);
+        displayLastTap("present", student.name, `Manual: ${reason}`);
+        updateSessionCounter();
+        renderRecentTaps();
+        scheduleDebouncedSync(1000);
+        closeManualOverrideModal();
+      }
+    }
+
+    // ==========================================
+    // 10. REGISTRATION MODE (Online Supervised)
     // ==========================================
     function openRegisterScreen() {
       initAudio();
@@ -1230,7 +1520,7 @@
     }
 
     // ==========================================
-    // 10. SYNC LAYER (Batching, Mutex, Retries)
+    // 11. SYNC LAYER (Batching, Mutex, Retries)
     // ==========================================
     function scheduleDebouncedSync(delayMs = 2000) {
       if (syncTimeoutId) clearTimeout(syncTimeoutId);
@@ -1394,7 +1684,7 @@
     }
 
     // ==========================================
-    // 11. UI RENDERING HELPERS
+    // 12. UI RENDERING HELPERS
     // ==========================================
     function switchScreen(screenId) {
       currentScreen = screenId;
@@ -1463,13 +1753,14 @@
           badge = `<span class="badge badge-warning">Duplicate</span>`;
         }
 
+        const typeLabel = e.type === "manual" ? `manual (${e.reason || "override"})` : e.type;
         const syncIcon = e.synced ? "✓" : "⏳";
 
         return `
           <div class="recent-item">
             <div>
               <div class="recent-item-name">${displayName}</div>
-              <div class="recent-item-meta">${timeStr} &bull; ${e.type} <span style="font-size:0.75rem; margin-left:4px;">${syncIcon}</span></div>
+              <div class="recent-item-meta">${timeStr} &bull; ${typeLabel} <span style="font-size:0.75rem; margin-left:4px;">${syncIcon}</span></div>
             </div>
             <div>${badge}</div>
           </div>
@@ -1498,7 +1789,7 @@
     }
 
     // ==========================================
-    // 12. LIFECYCLE, SYNC TRIGGERS & SERVICE WORKER
+    // 13. LIFECYCLE, SYNC TRIGGERS & SERVICE WORKER
     // ==========================================
     window.addEventListener("online", () => {
       console.log("Device online event detected -> triggering sync");

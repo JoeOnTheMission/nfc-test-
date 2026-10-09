@@ -76,7 +76,7 @@ async function runTests() {
     assert(unknownReg.ok === false && unknownReg.error === "unknown_student", "Refuse registration for unknown student ID");
 
     if (test1) {
-      const regSuccess = await postApi({ pin: PIN, action: "register", studentId: "TEST001", uid: "04:a1:b2:c3" });
+      const regSuccess = await postApi({ pin: PIN, action: "register", studentId: "TEST001", uid: "04:a1:b2:c3", replace: true });
       assert(regSuccess.ok === true, "Register TEST001 with UID 04:a1:b2:c3", JSON.stringify(regSuccess));
 
       const takenReg = await postApi({ pin: PIN, action: "register", studentId: "TEST002", uid: "04:a1:b2:c3" });
@@ -87,7 +87,9 @@ async function runTests() {
     }
 
     // 5. Session Sync & Attendance Logic
-    const sessionKey = "TEST COURSE|2026-10-09";
+    const testDate = "2026-10-09-" + Math.floor(Date.now() / 1000);
+    const sessionKey = `TEST COURSE|${testDate}`;
+    const unregUid = "04:ff:ee:" + Math.floor(Math.random() * 256).toString(16).padStart(2, "0");
     const tapId1 = "tap-test-uuid-" + Date.now() + "-1";
     const tapId2 = "tap-test-uuid-" + Date.now() + "-2";
     const tapId3 = "tap-test-uuid-" + Date.now() + "-3";
@@ -101,7 +103,7 @@ async function runTests() {
         {
           sessionKey: sessionKey,
           course: "TEST COURSE",
-          date: "2026-10-09",
+          date: testDate,
           startedAt: new Date().toISOString()
         }
       ],
@@ -119,7 +121,7 @@ async function runTests() {
           tapId: tapId3,
           type: "tap",
           sessionKey: sessionKey,
-          uid: "04:ff:ee:dd",
+          uid: unregUid,
           tapTime: new Date(Date.now() + 1000).toISOString()
         },
         // Event 3: Invalid manual event (missing reason)
@@ -164,7 +166,7 @@ async function runTests() {
     const idempotentSync = await postApi({
       pin: PIN,
       action: "sync",
-      sessions: [{ sessionKey, course: "TEST COURSE", date: "2026-10-09", startedAt: new Date().toISOString() }],
+      sessions: [{ sessionKey, course: "TEST COURSE", date: testDate, startedAt: new Date().toISOString() }],
       events: [
         {
           tapId: tapId1,
@@ -182,7 +184,7 @@ async function runTests() {
     const duplicateSync = await postApi({
       pin: PIN,
       action: "sync",
-      sessions: [{ sessionKey, course: "TEST COURSE", date: "2026-10-09", startedAt: new Date().toISOString() }],
+      sessions: [{ sessionKey, course: "TEST COURSE", date: testDate, startedAt: new Date().toISOString() }],
       events: [
         {
           tapId: tapId2,
@@ -196,12 +198,12 @@ async function runTests() {
     const dupResult = (duplicateSync.results || []).find(r => r.tapId === tapId2);
     assert(dupResult && dupResult.status === "duplicate", "Duplicate tap in same session marked 'duplicate'", JSON.stringify(dupResult));
 
-    // 8. Late-resolution test: register TEST002 with previously unknown UID 04:ff:ee:dd
+    // 8. Late-resolution test: register TEST002 with previously unknown UID unregUid
     const lateResolveReg = await postApi({
       pin: PIN,
       action: "register",
       studentId: "TEST002",
-      uid: "04:ff:ee:dd",
+      uid: unregUid,
       replace: true
     });
     assert(
