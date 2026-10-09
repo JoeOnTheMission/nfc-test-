@@ -1,5 +1,5 @@
 // Tap-to-Attend Service Worker
-const CACHE_VERSION = "v0.1.0";
+const CACHE_VERSION = "v0.2.0";
 const CACHE_NAME = `tap-to-attend-${CACHE_VERSION}`;
 
 // Assets to cache locally. Strict relative paths for GitHub Pages sub-path hosting.
