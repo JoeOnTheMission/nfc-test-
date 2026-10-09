@@ -666,7 +666,25 @@
 
       <div>
         <label for="course-select">📚 Select Subject</label>
-        <select id="course-select"></select>
+        <select id="course-select" onchange="autoSuggestPeriod()"></select>
+      </div>
+
+      <div>
+        <label for="period-select">⏰ Period / Time Slot</label>
+        <select id="period-select">
+          <option value="2:30 - 4:30">Period 1 &bull; 2:30 - 4:30</option>
+          <option value="4:30 - 6:30">Period 2 &bull; 4:30 - 6:30</option>
+          <option value="7:30 - 9:20">Period 3 &bull; 7:30 - 9:20</option>
+          <option value="Lab">Lab Session</option>
+          <option value="Extra">Extra / Make-up Class</option>
+        </select>
+      </div>
+
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 0.5rem 0.75rem; background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 12px; margin-top: -0.25rem;">
+        <span style="font-size: 0.8rem; font-weight: 700; color: var(--text);">Force New Column</span>
+        <label style="margin-bottom: 0; display: flex; align-items: center; cursor: pointer;">
+          <input type="checkbox" id="force-new-session-checkbox" style="width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer;">
+        </label>
       </div>
 
       <button id="start-session-btn" onclick="startSession()">
@@ -882,7 +900,7 @@
     // ==========================================
     // 1. CONFIGURATION & APP VERSION
     // ==========================================
-    const APP_VERSION = "1.2.0";
+    const APP_VERSION = "1.3.0";
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvvOJvmQdc7ZoxusT5x1VvajvrRRR_fuCIn5Hl5Zco_O_Ma_o6Y7tlSVad_cuuUr1w/exec";
     const TIMEZONE = "Africa/Addis_Ababa";
 
@@ -1236,6 +1254,78 @@
       populateHomeView(bootstrap);
     }
 
+    // ==========================================
+    // 4b. SECTION B TIMETABLE AUTO-SUGGESTION
+    // ==========================================
+    const SECTION_B_SCHEDULE = {
+      // 1: Monday, 2: Tuesday, 3: Wednesday, 4: Thursday, 5: Friday
+      1: {
+        "2:30 - 4:30": "Computational Methods",
+        "4:30 - 6:30": "Electrical Machine",
+        "7:30 - 9:20": "Electrical Machine" // Lab
+      },
+      2: {
+        "4:30 - 6:30": "Engineering Thermodynamics",
+        "7:30 - 9:20": "Workshop for Mechatronics"
+      },
+      3: {
+        "2:30 - 4:30": "Engineering Thermodynamics",
+        "4:30 - 6:30": "Strength of Materials"
+      },
+      4: {
+        "2:30 - 4:30": "Design of Machine Elements I"
+      }
+    };
+
+    function autoSuggestPeriod() {
+      // Auto-adjust Period dropdown if a schedule match is found
+      const courseSelect = document.getElementById("course-select");
+      const periodSelect = document.getElementById("period-select");
+      if (!courseSelect || !periodSelect) return;
+
+      const selectedCourse = (courseSelect.value || "").toLowerCase();
+      if (selectedCourse.includes("lab")) {
+        periodSelect.value = "Lab";
+      }
+    }
+
+    function autoSuggestScheduleOnLoad() {
+      const now = new Date();
+      // Addis Ababa Day of Week (0 = Sun, 1 = Mon, ..., 6 = Sat)
+      const dayFormatter = new Intl.DateTimeFormat("en-US", { timeZone: TIMEZONE, weekday: "numeric" });
+      // en-US with numeric weekday is not standard across all JS engines, use formatToParts
+      const parts = new Intl.DateTimeFormat("en-US", { timeZone: TIMEZONE, weekday: "short", hour: "numeric", hour12: false }).formatToParts(now);
+      const weekdayStr = parts.find(p => p.type === "weekday")?.value || "";
+      const hour = parseInt(parts.find(p => p.type === "hour")?.value || "0", 10);
+
+      const dayMap = { "Mon": 1, "Tue": 2, "Wed": 3, "Thu": 4, "Fri": 5 };
+      const dayNum = dayMap[weekdayStr] || 0;
+
+      const courseSelect = document.getElementById("course-select");
+      const periodSelect = document.getElementById("period-select");
+      if (!courseSelect || !periodSelect || !SECTION_B_SCHEDULE[dayNum]) return;
+
+      const todaySchedule = SECTION_B_SCHEDULE[dayNum];
+      let suggestedPeriod = "2:30 - 4:30";
+      if (hour >= 10 && hour < 14) {
+        suggestedPeriod = "4:30 - 6:30";
+      } else if (hour >= 14) {
+        suggestedPeriod = "7:30 - 9:20";
+      }
+
+      if (todaySchedule[suggestedPeriod]) {
+        const keyword = todaySchedule[suggestedPeriod].toLowerCase();
+        // Match keyword in courseSelect options
+        for (let i = 0; i < courseSelect.options.length; i++) {
+          if (courseSelect.options[i].text.toLowerCase().includes(keyword)) {
+            courseSelect.selectedIndex = i;
+            break;
+          }
+        }
+        periodSelect.value = (suggestedPeriod === "7:30 - 9:20" && keyword.includes("electrical")) ? "Lab" : suggestedPeriod;
+      }
+    }
+
     function populateHomeView(bootstrap) {
       const select = document.getElementById("course-select");
       select.innerHTML = "";
@@ -1253,6 +1343,8 @@
 
       const regCount = (bootstrap.registry && bootstrap.registry.length) || 0;
       document.getElementById("registry-count").textContent = `${regCount} students registered`;
+
+      autoSuggestScheduleOnLoad();
     }
 
     // ==========================================
@@ -1425,9 +1517,23 @@
       await requestWakeLock();
 
       const courseSelect = document.getElementById("course-select");
+      const periodSelect = document.getElementById("period-select");
+      const forceNewCheckbox = document.getElementById("force-new-session-checkbox");
+
       const course = courseSelect.value || "TEST COURSE";
+      const period = periodSelect ? periodSelect.value : "2:30 - 4:30";
       const dateStr = getAddisAbabaDateString();
-      const sessionKey = `${course}|${dateStr}`;
+      const forceNew = forceNewCheckbox && forceNewCheckbox.checked;
+
+      // Uncheck force new checkbox for next time
+      if (forceNewCheckbox) forceNewCheckbox.checked = false;
+
+      // Construct sessionKey with Course + Date + Period (or timestamp if forced new)
+      let sessionKey = `${course}|${dateStr}|${period}`;
+      if (forceNew) {
+        const timeTag = Math.floor(Date.now() / 1000);
+        sessionKey = `${course}|${dateStr}|${period}_${timeTag}`;
+      }
 
       let sessions = loadStorage("att.sessions", []);
       let sessionRecord = sessions.find(s => s.sessionKey === sessionKey);
@@ -1436,6 +1542,7 @@
         sessionRecord = {
           sessionKey: sessionKey,
           course: course,
+          period: period,
           date: dateStr,
           startedAt: new Date().toISOString(),
           synced: false
@@ -1447,7 +1554,7 @@
       activeSession = sessionRecord;
 
       document.getElementById("session-course-title").textContent = course;
-      document.getElementById("session-date-subtitle").textContent = dateStr;
+      document.getElementById("session-date-subtitle").textContent = `${dateStr} (${period})`;
       
       resetLastTapCard();
       updateSessionCounter();

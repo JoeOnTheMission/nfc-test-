@@ -419,7 +419,7 @@ function ensureSessionColumn(publicSs, sessionsSheet, session, registryStudents)
   const newCol = lastCol + 1;
   const colLetter = getColumnLetter(newCol);
 
-  // Format header: yyyy-MM-dd \n HH:mm
+  // Format header: yyyy-MM-dd \n HH:mm (or period if available)
   let timePart = "00:00";
   if (session.startedAt) {
     try {
@@ -429,7 +429,8 @@ function ensureSessionColumn(publicSs, sessionsSheet, session, registryStudents)
       timePart = String(session.startedAt).substring(11, 16) || "00:00";
     }
   }
-  const headerText = `${session.date}\n${timePart}`;
+  const periodLabel = session.period ? `\n[${session.period}]` : `\n${timePart}`;
+  const headerText = `${session.date}${periodLabel}`;
 
   courseSheet.getRange(1, newCol).setValue(headerText).setFontWeight("bold").setWrap(true);
   
