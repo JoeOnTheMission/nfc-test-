@@ -419,18 +419,33 @@ function ensureSessionColumn(publicSs, sessionsSheet, session, registryStudents)
   const newCol = lastCol + 1;
   const colLetter = getColumnLetter(newCol);
 
-  // Format header: yyyy-MM-dd \n HH:mm (or period if available)
-  let timePart = "00:00";
+  // Format header: 'Tue, Mar 5, 2026' \n '02:30 PM' (or period label)
+  let datePart = session.date;
+  let timePart = "";
   if (session.startedAt) {
     try {
       const d = new Date(session.startedAt);
-      timePart = Utilities.formatDate(d, TIMEZONE, "HH:mm");
+      datePart = Utilities.formatDate(d, TIMEZONE, "EEE, MMM d, yyyy");
+      timePart = Utilities.formatDate(d, TIMEZONE, "hh:mm a");
     } catch (e) {
-      timePart = String(session.startedAt).substring(11, 16) || "00:00";
+      datePart = session.date;
+      timePart = String(session.startedAt).substring(11, 16) || "";
+    }
+  } else if (session.date) {
+    try {
+      // Parse YYYY-MM-DD
+      const parts = session.date.split("-");
+      if (parts.length === 3) {
+        const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+        datePart = Utilities.formatDate(d, TIMEZONE, "EEE, MMM d, yyyy");
+      }
+    } catch (e) {
+      datePart = session.date;
     }
   }
-  const periodLabel = session.period ? `\n[${session.period}]` : `\n${timePart}`;
-  const headerText = `${session.date}${periodLabel}`;
+
+  const slotInfo = session.period ? `\n[${session.period}]` : (timePart ? `\n${timePart}` : "");
+  const headerText = `${datePart}${slotInfo}`;
 
   courseSheet.getRange(1, newCol).setValue(headerText).setFontWeight("bold").setWrap(true);
   
