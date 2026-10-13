@@ -232,57 +232,55 @@ function getRegistryData(registrySheet) {
 }
 
 /**
- * Handle register action
+ * Core registration processor used by both single register and batch sync
  */
-function handleRegister(privateSs, payload) {
-  const studentId = String(payload.studentId || "").trim();
-  const rawUid = payload.uid;
-  const replace = payload.replace === true;
+function executeRegistration(privateSs, publicSs, registrySheet, auditSheet, logSheet, sessionsSheet, registry, regData) {
+  const studentId = String(regData.studentId || "").trim();
+  const rawUid = regData.uid;
+  const replace = regData.replace === true;
   const uid = normalizeUid(rawUid);
 
   if (!studentId || !uid) {
-    return makeJsonResponse({ ok: false, error: "bad_params", message: "studentId and uid are required" });
+    return { status: "error", error: "bad_params", message: "studentId and uid are required" };
   }
-
-  const registrySheet = privateSs.getSheetByName("Registry");
-  const auditSheet = privateSs.getSheetByName("Audit");
-  const registry = getRegistryData(registrySheet);
 
   const targetStudent = registry.find(s => s.studentId === studentId);
   if (!targetStudent) {
-    return makeJsonResponse({ ok: false, error: "unknown_student" });
+    return { status: "error", error: "unknown_student" };
   }
 
   const existingOwner = registry.find(s => s.uid === uid && s.studentId !== studentId);
   if (existingOwner) {
-    return makeJsonResponse({ ok: false, error: "uid_taken", ownerName: existingOwner.name });
+    return { status: "error", error: "uid_taken", ownerName: existingOwner.name };
   }
 
-  if (targetStudent.uid && targetStudent.uid !== "" && !replace) {
-    return makeJsonResponse({ ok: false, error: "student_already_registered", currentUid: targetStudent.uid });
+  if (targetStudent.uid && targetStudent.uid !== "" && targetStudent.uid !== uid && !replace) {
+    return { status: "error", error: "student_already_registered", currentUid: targetStudent.uid };
   }
 
-  const timestamp = formatTimestamp(new Date());
+  if (targetStudent.uid === uid) {
+    return { status: "registered", alreadyRegistered: true };
+  }
+
+  const timestamp = regData.registeredAt || formatTimestamp(new Date());
   const oldUid = targetStudent.uid;
 
   // Update Registry row (Column C: UID, Column D: RegisteredAt)
   registrySheet.getRange(targetStudent.rowIndex, 3, 1, 2).setValues([[uid, timestamp]]);
 
+  // Update in-memory targetStudent
+  targetStudent.uid = uid;
+  targetStudent.registeredAt = timestamp;
+
   // Audit log
   if (auditSheet) {
     const actionName = (oldUid && oldUid !== "") ? "replace" : "register";
-    const note = (oldUid && oldUid !== "") ? ("Replaced old UID: " + oldUid) : "Initial registration";
-    const auditRow = [timestamp, actionName, studentId, uid, note];
+    const note = (oldUid && oldUid !== "") ? ("Replaced old UID: " + oldUid) : "Card registered";
+    const auditRow = [formatTimestamp(new Date()), actionName, studentId, uid, note];
     auditSheet.getRange(Math.max(auditSheet.getLastRow() + 1, 2), 1, 1, auditRow.length).setValues([auditRow]);
   }
 
   // Late-resolve: retroactively mark past unknown_uid logs for this UID as present
-  const logSheet = privateSs.getSheetByName("Log");
-  const sessionsSheet = privateSs.getSheetByName("Sessions");
-  const scriptProps = PropertiesService.getScriptProperties();
-  const publicSheetId = scriptProps.getProperty("PUBLIC_SHEET_ID");
-  const publicSs = publicSheetId ? SpreadsheetApp.openById(publicSheetId) : null;
-
   let lateResolvedCount = 0;
   if (logSheet && logSheet.getLastRow() >= 2) {
     const logRows = logSheet.getRange(2, 1, logSheet.getLastRow() - 1, 10).getValues();
@@ -327,7 +325,34 @@ function handleRegister(privateSs, payload) {
     }
   }
 
-  // Fetch updated registry for response
+  return { status: "registered", lateResolvedCount: lateResolvedCount };
+}
+
+/**
+ * Handle register action
+ */
+function handleRegister(privateSs, payload) {
+  const registrySheet = privateSs.getSheetByName("Registry");
+  const auditSheet = privateSs.getSheetByName("Audit");
+  const logSheet = privateSs.getSheetByName("Log");
+  const sessionsSheet = privateSs.getSheetByName("Sessions");
+  const scriptProps = PropertiesService.getScriptProperties();
+  const publicSheetId = scriptProps.getProperty("PUBLIC_SHEET_ID");
+  const publicSs = publicSheetId ? SpreadsheetApp.openById(publicSheetId) : null;
+
+  const registry = getRegistryData(registrySheet);
+  const res = executeRegistration(privateSs, publicSs, registrySheet, auditSheet, logSheet, sessionsSheet, registry, payload);
+
+  if (res.status === "error") {
+    return makeJsonResponse({
+      ok: false,
+      error: res.error,
+      ownerName: res.ownerName,
+      currentUid: res.currentUid,
+      message: res.message
+    });
+  }
+
   const updatedRegistry = getRegistryData(registrySheet).map(r => ({
     studentId: r.studentId,
     name: r.name,
@@ -337,7 +362,7 @@ function handleRegister(privateSs, payload) {
   return makeJsonResponse({
     ok: true,
     registry: updatedRegistry,
-    lateResolvedCount: lateResolvedCount
+    lateResolvedCount: res.lateResolvedCount || 0
   });
 }
 
@@ -550,14 +575,28 @@ function applyConditionalFormatting(sheet) {
  * Handle sync action
  */
 function handleSync(privateSs, publicSs, payload) {
+  const registrations = payload.registrations || [];
   const sessions = payload.sessions || [];
   const events = payload.events || [];
 
   const registrySheet = privateSs.getSheetByName("Registry");
+  const auditSheet = privateSs.getSheetByName("Audit");
   const sessionsSheet = privateSs.getSheetByName("Sessions");
   const logSheet = privateSs.getSheetByName("Log");
 
   const registry = getRegistryData(registrySheet);
+
+  // 0. Process offline registrations first so updated UIDs are recognized by subsequent events
+  const registrationResults = [];
+  registrations.forEach(reg => {
+    const regRes = executeRegistration(privateSs, publicSs, registrySheet, auditSheet, logSheet, sessionsSheet, registry, reg);
+    registrationResults.push({
+      regId: reg.regId,
+      status: regRes.status === "error" ? regRes.error : "registered",
+      error: regRes.error || null,
+      alreadyRegistered: regRes.alreadyRegistered || false
+    });
+  });
 
   // 1. Process and ensure sessions
   const sessionColumnMap = {};
@@ -699,6 +738,7 @@ function handleSync(privateSs, publicSs, payload) {
   return makeJsonResponse({
     ok: true,
     results: results,
+    registrationResults: registrationResults,
     registry: freshRegistry
   });
 }

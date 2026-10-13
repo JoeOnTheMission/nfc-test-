@@ -857,12 +857,19 @@
     </div>
 
     <!-- ========================================== -->
-    <!-- SCREEN 4: REGISTRATION MODE (ONLINE ONLY)  -->
+    <!-- SCREEN 4: REGISTRATION MODE (OFFLINE & SYNC) -->
     <!-- ========================================== -->
     <div id="screen-register" class="screen card">
-      <div style="display: flex; justify-content: space-between; align-items: center;">
-        <h2 style="font-size: 1.25rem;">Card Registration</h2>
-        <button onclick="closeRegisterScreen()" class="btn-secondary" style="width: auto; padding: 0.35rem 0.75rem; font-size: 0.8rem;">&larr; Back</button>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.4rem;">
+        <div>
+          <h2 style="font-size: 1.25rem; margin-bottom: 0.15rem;">Card Registration</h2>
+          <div style="font-size: 0.72rem; color: var(--text-muted);">Works offline &bull; Auto-syncs when online</div>
+        </div>
+        <div style="display: flex; gap: 0.4rem; align-items: center;">
+          <span id="reg-sync-badge" class="badge badge-success">Synced</span>
+          <button onclick="syncNow(true)" class="btn-secondary" style="width: auto; padding: 0.35rem 0.6rem; font-size: 0.8rem;" title="Sync with Google Sheets">🔄 Sync</button>
+          <button onclick="closeRegisterScreen()" class="btn-secondary" style="width: auto; padding: 0.35rem 0.75rem; font-size: 0.8rem;">&larr; Back</button>
+        </div>
       </div>
 
       <!-- Step 4A: Student List View -->
@@ -917,7 +924,7 @@
     // ==========================================
     // 1. CONFIGURATION & APP VERSION
     // ==========================================
-    const APP_VERSION = "1.5.0";
+    const APP_VERSION = "1.6.0";
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvvOJvmQdc7ZoxusT5x1VvajvrRRR_fuCIn5Hl5Zco_O_Ma_o6Y7tlSVad_cuuUr1w/exec";
     const TIMEZONE = "Africa/Addis_Ababa";
 
@@ -991,15 +998,17 @@
     }
 
     function clearLocalStorageData() {
-      if (confirm("Reset local offline attendance data?")) {
+      if (confirm("Reset local offline attendance and pending card registration data?")) {
         localStorage.removeItem("att.sessions");
         localStorage.removeItem("att.events");
+        localStorage.removeItem("att.pendingRegistrations");
         updateSyncBadges();
         if (activeSession) {
           updateSessionCounter();
           renderRecentTaps();
         }
-        alert("Local attendance records cleared.");
+        renderRegistrationStudentList();
+        alert("Local attendance and registration records cleared.");
       }
     }
 
@@ -1898,14 +1907,15 @@
     }
 
     // ==========================================
-    // 10. REGISTRATION MODE (Online Supervised)
+    // 10. REGISTRATION MODE (Offline-First & Auto-Sync)
     // ==========================================
     function openRegisterScreen() {
       initAudio();
       switchScreen("register");
       cancelTargetRegistration();
       renderRegistrationStudentList();
-      refreshBootstrapOnline();
+      updateSyncBadges();
+      refreshBootstrapOnline().catch(() => {});
     }
 
     function closeRegisterScreen() {
@@ -1927,6 +1937,8 @@
       const listEl = document.getElementById("reg-student-list");
       const bootstrap = loadStorage("att.bootstrap", { registry: [] });
       const registry = bootstrap.registry || [];
+      const pendingRegs = loadStorage("att.pendingRegistrations", []);
+      const unsyncedStudentIds = new Set(pendingRegs.filter(r => !r.synced).map(r => r.studentId));
 
       let filtered = registry.filter(s => {
         const matchesSearch = s.name.toLowerCase().includes(search) || s.studentId.toLowerCase().includes(search);
@@ -1941,9 +1953,17 @@
       }
 
       listEl.innerHTML = filtered.map(s => {
-        const statusBadge = s.uid 
-          ? `<span class="badge badge-success" style="font-family: monospace;">${s.uid}</span>` 
-          : `<span class="badge badge-warning">Unregistered</span>`;
+        const isPendingSync = unsyncedStudentIds.has(s.studentId) || s.pendingSync;
+        let statusBadge = "";
+        if (s.uid) {
+          if (isPendingSync) {
+            statusBadge = `<span class="badge badge-warning" style="font-family: monospace; font-size: 0.72rem;">${s.uid} <span style="font-size: 0.65rem;">(Offline)</span></span>`;
+          } else {
+            statusBadge = `<span class="badge badge-success" style="font-family: monospace; font-size: 0.72rem;">${s.uid}</span>`;
+          }
+        } else {
+          statusBadge = `<span class="badge badge-warning">Unregistered</span>`;
+        }
 
         return `
           <div class="student-item" onclick="selectStudentForRegistration('${s.studentId}')">
@@ -2006,7 +2026,7 @@
       input.value = "";
     }
 
-    async function handleCardRegistration(uid, isReplace = false) {
+    function handleCardRegistration(uid, isReplace = false) {
       if (!regTargetStudent) return;
       const target = regTargetStudent;
 
@@ -2014,74 +2034,103 @@
       const title = document.getElementById("reg-feedback-title");
       const desc = document.getElementById("reg-feedback-desc");
 
-      card.className = "last-tap-card card";
-      title.textContent = "Registering...";
-      desc.textContent = `Linking UID ${uid} to ${target.name}...`;
+      const bootstrap = loadStorage("att.bootstrap", { registry: [] });
+      const registry = bootstrap.registry || [];
 
-      try {
-        const payload = {
-          pin: sessionPin,
-          action: "register",
-          studentId: target.studentId,
-          uid: uid,
-          replace: isReplace
-        };
-
-        const res = await fetch(SCRIPT_URL, {
-          method: "POST",
-          headers: { "Content-Type": "text/plain;charset=utf-8" },
-          body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(12000)
-        });
-
-        const data = await res.json();
-
-        if (data.ok) {
-          // Success
-          playBeep("success");
-          triggerVibration([150, 50, 150]);
-          card.className = "last-tap-card card present";
-          title.textContent = "Registered Successfully!";
-          desc.textContent = `${target.name} is now linked to card ${uid}`;
-
-          // Update local bootstrap registry
-          if (data.registry) {
-            const currentBootstrap = loadStorage("att.bootstrap", { courses: [], registry: [] });
-            currentBootstrap.registry = data.registry;
-            saveStorage("att.bootstrap", currentBootstrap);
-          }
-
-          setTimeout(() => {
-            cancelTargetRegistration();
-          }, 1600);
-
-        } else if (data.error === "uid_taken") {
-          playBeep("error");
-          triggerVibration([300]);
-          card.className = "last-tap-card card unknown";
-          title.textContent = "UID Already Taken!";
-          desc.textContent = `This card already belongs to ${data.ownerName || "another student"}.`;
-
-        } else if (data.error === "student_already_registered") {
-          playBeep("warning");
-          triggerVibration([100, 100]);
-          card.className = "last-tap-card card duplicate";
-          title.textContent = "Student Already Has Card";
-          desc.textContent = `Existing UID: ${data.currentUid}. Replace card?`;
-
-          if (confirm(`Student ${target.name} already has card ${data.currentUid}. Are you sure you want to replace it with ${uid}?`)) {
-            handleCardRegistration(uid, true);
-          }
-        } else {
-          throw new Error(data.message || data.error || "Registration refused by server");
-        }
-
-      } catch (err) {
+      // 1. Uniqueness check: is UID already assigned to a DIFFERENT student in local registry?
+      const existingOwner = registry.find(s => s.uid === uid && s.studentId !== target.studentId);
+      if (existingOwner) {
         playBeep("error");
+        triggerVibration([300]);
         card.className = "last-tap-card card unknown";
-        title.textContent = "Registration Failed";
-        desc.textContent = err.message || "Network error. Connect online to register.";
+        title.textContent = "UID Already Taken!";
+        desc.textContent = `This card already belongs to ${existingOwner.name} (${existingOwner.studentId}).`;
+        return;
       }
+
+      // 2. If student already has a card UID and replacement not confirmed
+      if (target.uid && target.uid !== uid && !isReplace) {
+        playBeep("warning");
+        triggerVibration([100, 100]);
+        card.className = "last-tap-card card duplicate";
+        title.textContent = "Student Already Has Card";
+        desc.textContent = `Existing UID: ${target.uid}. Replace card?`;
+
+        if (confirm(`Student ${target.name} already has card ${target.uid}. Are you sure you want to replace it with ${uid}?`)) {
+          handleCardRegistration(uid, true);
+        }
+        return;
+      }
+
+      // 3. Offline-First Registration Execution
+      const nowIso = new Date().toISOString();
+      const regId = crypto.randomUUID();
+
+      // Update student in local bootstrap registry
+      const sIdx = registry.findIndex(s => s.studentId === target.studentId);
+      if (sIdx !== -1) {
+        registry[sIdx].uid = uid;
+        registry[sIdx].pendingSync = true;
+      }
+      target.uid = uid;
+      target.pendingSync = true;
+      bootstrap.registry = registry;
+      saveStorage("att.bootstrap", bootstrap);
+
+      // Queue into pending registrations
+      let pendingRegs = loadStorage("att.pendingRegistrations", []);
+      pendingRegs = pendingRegs.filter(r => r.studentId !== target.studentId);
+      pendingRegs.push({
+        regId: regId,
+        studentId: target.studentId,
+        name: target.name,
+        uid: uid,
+        replace: isReplace || !!target.uid,
+        registeredAt: nowIso,
+        synced: false
+      });
+      saveStorage("att.pendingRegistrations", pendingRegs);
+
+      // Late-resolve any local unknown attendance taps in active session for this UID
+      const events = loadStorage("att.events", []);
+      let eventsChanged = false;
+      events.forEach(e => {
+        if (e.uid === uid && e.localResult === "unknown") {
+          e.studentId = target.studentId;
+          e.name = target.name;
+          e.localResult = "present";
+          e.synced = false;
+          eventsChanged = true;
+        }
+      });
+      if (eventsChanged) {
+        saveStorage("att.events", events);
+        if (activeSession) {
+          updateSessionCounter();
+          renderRecentTaps();
+        }
+      }
+
+      // Audio & haptic feedback
+      playBeep("success");
+      triggerVibration([150, 50, 150]);
+      card.className = "last-tap-card card present";
+
+      const isOnline = navigator.onLine;
+      if (isOnline) {
+        title.textContent = "Registered Successfully!";
+        desc.textContent = `${target.name} linked to card ${uid}. Syncing with server...`;
+      } else {
+        title.textContent = "Registered (Offline)!";
+        desc.textContent = `${target.name} linked to card ${uid}. Saved offline, will sync when online.`;
+      }
+
+      updateSyncBadges();
+      scheduleDebouncedSync(500);
+
+      setTimeout(() => {
+        cancelTargetRegistration();
+      }, 1600);
     }
 
     // ==========================================
@@ -2097,12 +2146,15 @@
     function getUnsyncedCounts() {
       const sessions = loadStorage("att.sessions", []);
       const events = loadStorage("att.events", []);
+      const pendingRegs = loadStorage("att.pendingRegistrations", []);
       const unsyncedSessions = sessions.filter(s => !s.synced);
       const unsyncedEvents = events.filter(e => !e.synced);
+      const unsyncedRegs = pendingRegs.filter(r => !r.synced);
       return {
         sessionsCount: unsyncedSessions.length,
         eventsCount: unsyncedEvents.length,
-        total: unsyncedSessions.length + unsyncedEvents.length
+        registrationsCount: unsyncedRegs.length,
+        total: unsyncedSessions.length + unsyncedEvents.length + unsyncedRegs.length
       };
     }
 
@@ -2110,6 +2162,7 @@
       const counts = getUnsyncedCounts();
       const homeBadge = document.getElementById("home-sync-badge");
       const sessionBadge = document.getElementById("session-sync-badge");
+      const regBadge = document.getElementById("reg-sync-badge");
 
       let badgeClass = "badge badge-success";
       let text = "Synced";
@@ -2125,7 +2178,7 @@
         text = `${counts.total} unsynced`;
       }
 
-      [homeBadge, sessionBadge].forEach(b => {
+      [homeBadge, sessionBadge, regBadge].forEach(b => {
         if (b) {
           b.className = badgeClass;
           b.textContent = text;
@@ -2139,13 +2192,15 @@
 
       const sessions = loadStorage("att.sessions", []);
       const events = loadStorage("att.events", []);
+      const pendingRegs = loadStorage("att.pendingRegistrations", []);
 
       const unsyncedSessions = sessions.filter(s => !s.synced);
       const unsyncedEvents = events.filter(e => !e.synced);
+      const unsyncedRegs = pendingRegs.filter(r => !r.synced);
 
-      if (unsyncedSessions.length === 0 && unsyncedEvents.length === 0) {
+      if (unsyncedSessions.length === 0 && unsyncedEvents.length === 0 && unsyncedRegs.length === 0) {
         updateSyncBadges();
-        if (isUserInitiated) alert("All sessions and taps are already synced!");
+        if (isUserInitiated) alert("All data (sessions, taps, and card registrations) is already synced!");
         return;
       }
 
@@ -2155,10 +2210,18 @@
       try {
         const CHUNK_SIZE = 25;
         const eventChunk = unsyncedEvents.slice(0, CHUNK_SIZE);
+        const regChunk = unsyncedRegs.slice(0, CHUNK_SIZE);
 
         const payload = {
           pin: sessionPin,
           action: "sync",
+          registrations: regChunk.map(r => ({
+            regId: r.regId,
+            studentId: r.studentId,
+            uid: r.uid,
+            replace: r.replace === true,
+            registeredAt: r.registeredAt
+          })),
           sessions: unsyncedSessions.map(s => ({
             sessionKey: s.sessionKey,
             course: s.course,
@@ -2184,12 +2247,55 @@
           method: "POST",
           headers: { "Content-Type": "text/plain;charset=utf-8" },
           body: JSON.stringify(payload),
-          signal: AbortSignal.timeout(20000)
+          signal: AbortSignal.timeout(25000)
         });
 
         const data = await res.json();
 
         if (data.ok) {
+          // 1. Process registrations sync result
+          const currentRegs = loadStorage("att.pendingRegistrations", []);
+          if (data.registrationResults && Array.isArray(data.registrationResults)) {
+            const regResultMap = {};
+            data.registrationResults.forEach(r => {
+              regResultMap[r.regId] = r.status;
+            });
+            currentRegs.forEach(r => {
+              if (regResultMap[r.regId] === "registered" || regResultMap[r.regId] === "already_registered") {
+                r.synced = true;
+              } else if (regResultMap[r.regId]) {
+                r.synced = false;
+                r.syncError = regResultMap[r.regId];
+              }
+            });
+          } else if (regChunk.length > 0) {
+            // Fallback for older Apps Script deployment without registrationResults in handleSync
+            for (const r of regChunk) {
+              try {
+                const regRes = await fetch(SCRIPT_URL, {
+                  method: "POST",
+                  headers: { "Content-Type": "text/plain;charset=utf-8" },
+                  body: JSON.stringify({
+                    pin: sessionPin,
+                    action: "register",
+                    studentId: r.studentId,
+                    uid: r.uid,
+                    replace: r.replace === true
+                  }),
+                  signal: AbortSignal.timeout(10000)
+                });
+                const regData = await regRes.json();
+                if (regData.ok || regData.error === "student_already_registered") {
+                  r.synced = true;
+                }
+              } catch (e) {
+                console.warn("Fallback single register failed:", e);
+              }
+            }
+          }
+          saveStorage("att.pendingRegistrations", currentRegs);
+
+          // 2. Process events sync result
           const resultMap = {};
           (data.results || []).forEach(r => {
             resultMap[r.tapId] = r.status;
@@ -2204,6 +2310,7 @@
           });
           saveStorage("att.events", currentEvents);
 
+          // 3. Process sessions sync result
           const currentSessions = loadStorage("att.sessions", []);
           const sentSessionKeys = new Set(payload.sessions.map(s => s.sessionKey));
           currentSessions.forEach(s => {
@@ -2213,19 +2320,30 @@
           });
           saveStorage("att.sessions", currentSessions);
 
+          // 4. Update bootstrap registry from server while preserving unsynced local pending registrations
           if (data.registry && Array.isArray(data.registry)) {
             const currentBootstrap = loadStorage("att.bootstrap", { courses: [], registry: [] });
-            currentBootstrap.registry = data.registry;
+            const unsyncedSet = new Set(currentRegs.filter(r => !r.synced).map(r => r.studentId));
+            currentBootstrap.registry = data.registry.map(srvStudent => {
+              if (unsyncedSet.has(srvStudent.studentId)) {
+                const localReg = currentRegs.find(r => r.studentId === srvStudent.studentId);
+                return { ...srvStudent, uid: localReg.uid, pendingSync: true };
+              }
+              return srvStudent;
+            });
             saveStorage("att.bootstrap", currentBootstrap);
           }
 
           retryDelayMs = 5000;
           renderRecentTaps();
           updateSessionCounter();
+          renderRegistrationStudentList();
           updateSyncBadges();
 
-          const remainingUnsynced = currentEvents.filter(e => !e.synced).length;
-          if (remainingUnsynced > 0) {
+          // Check if more unsynced items remain
+          const remainingUnsyncedEvents = currentEvents.filter(e => !e.synced).length;
+          const remainingUnsyncedRegs = currentRegs.filter(r => !r.synced).length;
+          if (remainingUnsyncedEvents > 0 || remainingUnsyncedRegs > 0) {
             isSyncing = false;
             syncNow();
             return;
@@ -2244,7 +2362,7 @@
         scheduleDebouncedSync(retryDelayMs);
 
         if (isUserInitiated) {
-          alert(`Sync failed (${err.message || "Network offline"}). Taps are safely saved locally and will auto-sync when connected.`);
+          alert(`Sync failed (${err.message || "Network offline"}). Records and registrations are safely saved locally and will auto-sync when connected.`);
         }
       } finally {
         isSyncing = false;
@@ -2358,7 +2476,8 @@
     function copyBackupToClipboard() {
       const sessions = loadStorage("att.sessions", []);
       const events = loadStorage("att.events", []);
-      const backupData = JSON.stringify({ sessions, events }, null, 2);
+      const pendingRegistrations = loadStorage("att.pendingRegistrations", []);
+      const backupData = JSON.stringify({ sessions, events, pendingRegistrations }, null, 2);
 
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(backupData).then(() => {
