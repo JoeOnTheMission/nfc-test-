@@ -719,6 +719,13 @@
         </button>
       </div>
 
+      <!-- ========================================== -->
+      <!-- TODAY'S LIVE ACTIVITY & SHEET PREVIEW     -->
+      <!-- ========================================== -->
+      <div id="today-activity-section" style="margin-top: 0.75rem; border-top: 1px solid var(--card-border); padding-top: 0.85rem;">
+        <!-- Populated dynamically by renderTodayActivity() -->
+      </div>
+
       <div style="border-top: 1px solid var(--card-border); padding-top: 0.75rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.4rem;">
         <a href="./nfc-test.html" style="color: var(--accent); font-size: 0.85rem; text-decoration: none;">Open NFC Diag Tool &rarr;</a>
         <div style="display: flex; gap: 0.4rem;">
@@ -928,7 +935,7 @@
     // ==========================================
     // 1. CONFIGURATION & APP VERSION
     // ==========================================
-    const APP_VERSION = "1.8.0";
+    const APP_VERSION = "1.9.0";
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxvvOJvmQdc7ZoxusT5x1VvajvrRRR_fuCIn5Hl5Zco_O_Ma_o6Y7tlSVad_cuuUr1w/exec";
     const TIMEZONE = "Africa/Addis_Ababa";
 
@@ -1381,6 +1388,7 @@
       document.getElementById("registry-count").textContent = `${regCount} students registered`;
 
       autoSuggestScheduleOnLoad();
+      renderTodayActivity();
     }
 
     // ==========================================
@@ -1546,6 +1554,327 @@
         day: "2-digit"
       });
       return formatter.format(date);
+    }
+
+    function getAddisAbabaFormattedHeader(date = new Date()) {
+      try {
+        const formatter = new Intl.DateTimeFormat("en-US", {
+          timeZone: TIMEZONE,
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          year: "numeric"
+        });
+        return formatter.format(date);
+      } catch (e) {
+        return date.toDateString();
+      }
+    }
+
+    function formatTime12h(timeStr) {
+      if (!timeStr) return "";
+      const parts = String(timeStr).split(":");
+      if (parts.length < 2) return String(timeStr);
+      let h = parseInt(parts[0], 10);
+      const m = parts[1].padStart(2, "0");
+      if (isNaN(h)) return String(timeStr);
+      const ampm = h >= 12 ? "PM" : "AM";
+      h = h % 12;
+      h = h ? h : 12;
+      const hStr = h < 10 ? "0" + h : String(h);
+      return `${hStr}:${m} ${ampm}`;
+    }
+
+    function formatIsoTime12h(isoStr) {
+      if (!isoStr) return "";
+      try {
+        const d = new Date(isoStr);
+        return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      } catch (e) {
+        return "";
+      }
+    }
+
+    let todayActivityTab = "sessions"; // "sessions" or "registrations"
+    const expandedSheetGrids = new Set();
+
+    function switchTodayActivityTab(tab) {
+      todayActivityTab = tab;
+      renderTodayActivity();
+    }
+
+    function toggleSheetGrid(sessionKey) {
+      if (expandedSheetGrids.has(sessionKey)) {
+        expandedSheetGrids.delete(sessionKey);
+      } else {
+        expandedSheetGrids.add(sessionKey);
+      }
+      renderTodayActivity();
+    }
+
+    async function resumeSession(sessionKey) {
+      initAudio();
+      await requestWakeLock();
+
+      const sessions = loadStorage("att.sessions", []);
+      const sessionRecord = sessions.find(s => s.sessionKey === sessionKey);
+      if (!sessionRecord) return;
+
+      activeSession = sessionRecord;
+
+      document.getElementById("session-course-title").textContent = sessionRecord.course;
+      document.getElementById("session-date-subtitle").textContent = `${sessionRecord.date} (${sessionRecord.period || ""})`;
+
+      // Populate Start & End time inputs
+      const startInput = document.getElementById("session-start-time");
+      const endInput = document.getElementById("session-end-time");
+      if (startInput) startInput.value = sessionRecord.startTime || "08:30";
+      if (endInput) endInput.value = sessionRecord.endTime || "10:30";
+
+      resetLastTapCard();
+      updateSessionCounter();
+      renderRecentTaps();
+      updateSyncBadges();
+
+      switchScreen("session");
+      await startNfcScan();
+      scheduleDebouncedSync(500);
+    }
+
+    function renderTodayActivity() {
+      const container = document.getElementById("today-activity-section");
+      if (!container) return;
+
+      const todayStr = getAddisAbabaDateString();
+      const dateHeader = getAddisAbabaFormattedHeader();
+
+      const sessions = loadStorage("att.sessions", []);
+      const events = loadStorage("att.events", []);
+      const bootstrap = loadStorage("att.bootstrap", { registry: [] });
+      const pendingRegs = loadStorage("att.pendingRegistrations", []);
+      const registry = bootstrap.registry || [];
+
+      // Filter sessions created today
+      const todaySessions = sessions.filter(s => s.date === todayStr);
+
+      // Filter registrations created today
+      const todayRegMap = new Map();
+
+      // From pending registrations
+      pendingRegs.forEach(r => {
+        let rDate = "";
+        try { rDate = getAddisAbabaDateString(new Date(r.registeredAt)); } catch (e) {}
+        if (rDate === todayStr || (r.registeredAt && r.registeredAt.startsWith(todayStr))) {
+          todayRegMap.set(r.studentId, {
+            studentId: r.studentId,
+            name: r.name,
+            uid: r.uid,
+            registeredAt: r.registeredAt,
+            synced: r.synced === true
+          });
+        }
+      });
+
+      // From bootstrap registry (synced/server records with today's timestamp)
+      registry.forEach(s => {
+        if (s.registeredAt && (s.registeredAt.startsWith(todayStr) || getAddisAbabaDateString(new Date(s.registeredAt)) === todayStr)) {
+          if (!todayRegMap.has(s.studentId)) {
+            todayRegMap.set(s.studentId, {
+              studentId: s.studentId,
+              name: s.name,
+              uid: s.uid,
+              registeredAt: s.registeredAt,
+              synced: true
+            });
+          }
+        }
+      });
+
+      const todayRegistrations = Array.from(todayRegMap.values());
+
+      let html = `
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 0.75rem;">
+          <div>
+            <div style="font-size: 0.95rem; font-weight: 800; color: var(--text);">📅 Today's Live Sheet & Activity</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted);">${dateHeader}</div>
+          </div>
+          <button onclick="renderTodayActivity()" class="btn-secondary" style="width: auto; padding: 0.25rem 0.55rem; font-size: 0.72rem;">🔄 Refresh</button>
+        </div>
+
+        <!-- Pill Tabs -->
+        <div style="display: flex; gap: 0.4rem; margin-bottom: 0.75rem;">
+          <button onclick="switchTodayActivityTab('sessions')" class="btn-secondary" style="flex: 1; padding: 0.45rem 0.5rem; font-size: 0.78rem; font-weight: 700; ${todayActivityTab === 'sessions' ? 'background: rgba(0, 240, 255, 0.15); color: var(--accent); border-color: var(--accent);' : 'background: transparent; color: var(--text-muted);'}">
+            📚 Classes (${todaySessions.length})
+          </button>
+          <button onclick="switchTodayActivityTab('registrations')" class="btn-secondary" style="flex: 1; padding: 0.45rem 0.5rem; font-size: 0.78rem; font-weight: 700; ${todayActivityTab === 'registrations' ? 'background: rgba(0, 240, 255, 0.15); color: var(--accent); border-color: var(--accent);' : 'background: transparent; color: var(--text-muted);'}">
+            🪪 Registrations (${todayRegistrations.length})
+          </button>
+        </div>
+      `;
+
+      if (todayActivityTab === "sessions") {
+        if (todaySessions.length === 0) {
+          html += `
+            <div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 1.5rem 0.75rem; background: var(--input-bg); border-radius: 12px; border: 1px dashed var(--card-border);">
+              No attendance sessions started today yet.<br>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Select a subject above and tap <b>Start Session</b>.</span>
+            </div>
+          `;
+        } else {
+          html += `<div style="display: flex; flex-direction: column; gap: 0.75rem;">`;
+          todaySessions.forEach(s => {
+            const sessionEvents = events.filter(e => e.sessionKey === s.sessionKey);
+            const presentStudentsMap = new Map();
+            const unknownTaps = [];
+            sessionEvents.forEach(e => {
+              if (e.localResult === "present" && e.studentId && !presentStudentsMap.has(e.studentId)) {
+                presentStudentsMap.set(e.studentId, e);
+              } else if (e.localResult === "unknown") {
+                unknownTaps.push(e);
+              }
+            });
+            const presentCount = presentStudentsMap.size;
+            const totalStudents = registry.length;
+            const absentCount = Math.max(0, totalStudents - presentCount);
+
+            const isSynced = s.synced && sessionEvents.every(e => e.synced);
+            const unsyncedCount = (s.synced ? 0 : 1) + sessionEvents.filter(e => !e.synced).length;
+            const syncBadge = isSynced 
+              ? `<span class="badge badge-success">✓ Synced</span>` 
+              : `<span class="badge badge-warning">⏳ ${unsyncedCount} Unsynced</span>`;
+
+            let timingLabel = "";
+            if (s.startTime && s.endTime) {
+              timingLabel = `⏰ ${formatTime12h(s.startTime)} - ${formatTime12h(s.endTime)}`;
+            } else if (s.period) {
+              timingLabel = `⏰ ${s.period}`;
+            }
+
+            const isGridExpanded = expandedSheetGrids.has(s.sessionKey);
+
+            html += `
+              <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 0.85rem; display: flex; flex-direction: column; gap: 0.6rem;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem;">
+                  <div>
+                    <div style="font-size: 1.05rem; font-weight: 800; color: var(--accent);">${s.course}</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); font-weight: 600;">${timingLabel} &bull; ${s.period || "General"}</div>
+                  </div>
+                  <div>${syncBadge}</div>
+                </div>
+
+                <!-- Stats Bar -->
+                <div style="display: flex; gap: 0.5rem; align-items: center; background: rgba(0,0,0,0.25); border-radius: 8px; padding: 0.4rem 0.6rem; font-size: 0.78rem;">
+                  <div style="flex: 1;"><span style="color: var(--green); font-weight: 800;">✓ ${presentCount}</span> Present</div>
+                  <div style="flex: 1;"><span style="color: var(--red); font-weight: 800;">✗ ${absentCount}</span> Absent</div>
+                  <div style="color: var(--text-muted);">Total: ${totalStudents}</div>
+                </div>
+
+                <!-- Action Buttons: Continue & View Sheet -->
+                <div style="display: flex; gap: 0.4rem;">
+                  <button onclick="resumeSession('${s.sessionKey}')" class="btn-primary" style="flex: 1; padding: 0.45rem; font-size: 0.82rem; font-weight: 800; display: flex; align-items: center; justify-content: center; gap: 0.35rem;">
+                    <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                    Continue Session
+                  </button>
+                  <button onclick="toggleSheetGrid('${s.sessionKey}')" class="btn-secondary" style="width: auto; padding: 0.45rem 0.7rem; font-size: 0.8rem; font-weight: 700;">
+                    ${isGridExpanded ? 'Hide Sheet ▲' : 'View Sheet ▼'}
+                  </button>
+                </div>
+
+                <!-- Live Google Sheet Preview Table -->
+                ${isGridExpanded ? `
+                  <div style="margin-top: 0.25rem; border-top: 1px solid var(--card-border); padding-top: 0.5rem;">
+                    <div style="font-size: 0.72rem; color: var(--text-muted); font-weight: 700; margin-bottom: 0.4rem; text-transform: uppercase; letter-spacing: 0.5px;">
+                      📊 Google Sheet Column Preview &bull; ${s.course}
+                    </div>
+                    ${registry.length === 0 ? `
+                      <div style="text-align: center; color: var(--text-muted); padding: 1rem; font-size: 0.78rem;">
+                        No students loaded in roster yet. Tap <b>Refresh Roster</b> when online.
+                      </div>
+                    ` : `
+                      <div style="max-height: 240px; overflow-y: auto; border: 1px solid var(--card-border); border-radius: 8px;">
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.75rem; text-align: left;">
+                          <thead>
+                            <tr style="background: rgba(56, 189, 248, 0.12); border-bottom: 1px solid var(--card-border); color: var(--text);">
+                              <th style="padding: 0.4rem 0.5rem; width: 28px;">#</th>
+                              <th style="padding: 0.4rem 0.5rem;">Student Name</th>
+                              <th style="padding: 0.4rem 0.5rem; width: 45px; text-align: center;">Sheet</th>
+                              <th style="padding: 0.4rem 0.5rem; width: 75px; text-align: right;">Time</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${registry.map((st, idx) => {
+                              const tap = presentStudentsMap.get(st.studentId);
+                              const isPresent = !!tap;
+                              const statusBadge = isPresent 
+                                ? `<span style="background: #22c55e; color: #020617; font-weight: 900; padding: 0.15rem 0.45rem; border-radius: 4px; font-size: 0.72rem;">P</span>`
+                                : `<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; font-weight: 900; padding: 0.15rem 0.45rem; border-radius: 4px; font-size: 0.72rem; border: 1px solid rgba(239, 68, 68, 0.3);">A</span>`;
+                              const timeDisplay = isPresent && tap.tapTime ? formatIsoTime12h(tap.tapTime) : `<span style="color: var(--text-muted);">&mdash;</span>`;
+                              const rowBg = isPresent ? 'background: rgba(34, 197, 94, 0.05);' : '';
+
+                              return `
+                                <tr style="border-bottom: 1px solid rgba(255,255,255,0.05); ${rowBg}">
+                                  <td style="padding: 0.35rem 0.5rem; color: var(--text-muted); font-size: 0.7rem;">${idx + 1}</td>
+                                  <td style="padding: 0.35rem 0.5rem;">
+                                    <div style="font-weight: 600; color: var(--text);">${st.name}</div>
+                                    <div style="font-size: 0.65rem; color: var(--text-muted);">${st.studentId}</div>
+                                  </td>
+                                  <td style="padding: 0.35rem 0.5rem; text-align: center;">${statusBadge}</td>
+                                  <td style="padding: 0.35rem 0.5rem; text-align: right; font-family: monospace; font-size: 0.7rem; color: var(--text);">${timeDisplay}</td>
+                                </tr>
+                              `;
+                            }).join("")}
+                          </tbody>
+                        </table>
+                      </div>
+                    `}
+                    ${unknownTaps.length > 0 ? `
+                      <div style="margin-top: 0.5rem; padding: 0.4rem 0.6rem; background: var(--amber-bg); border: 1px solid var(--amber-border); border-radius: 6px; font-size: 0.72rem; color: var(--amber);">
+                        ⚠️ <b>${unknownTaps.length} Unregistered Card Tap(s):</b>
+                        ${unknownTaps.map(u => `UID: <code>${u.uid || "N/A"}</code> (${formatIsoTime12h(u.tapTime)})`).join(", ")}
+                      </div>
+                    ` : ''}
+                  </div>
+                ` : ''}
+
+              </div>
+            `;
+          });
+          html += `</div>`;
+        }
+      } else if (todayActivityTab === "registrations") {
+        if (todayRegistrations.length === 0) {
+          html += `
+            <div style="text-align: center; color: var(--text-muted); font-size: 0.85rem; padding: 1.5rem 0.75rem; background: var(--input-bg); border-radius: 12px; border: 1px dashed var(--card-border);">
+              No student cards registered today yet.<br>
+              <span style="font-size: 0.75rem; color: var(--text-muted);">Tap <b>Register Student Cards</b> above to link a student card.</span>
+            </div>
+          `;
+        } else {
+          html += `
+            <div style="display: flex; flex-direction: column; gap: 0.5rem;">
+              ${todayRegistrations.map(reg => {
+                const timeStr = reg.registeredAt ? formatIsoTime12h(reg.registeredAt) : "";
+                const syncBadge = reg.synced 
+                  ? `<span class="badge badge-success">✓ Synced</span>`
+                  : `<span class="badge badge-warning">⏳ Sync Pending</span>`;
+
+                return `
+                  <div style="background: var(--input-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 0.65rem 0.75rem; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;">
+                    <div>
+                      <div style="font-size: 0.9rem; font-weight: 700; color: var(--text);">${reg.name}</div>
+                      <div style="font-size: 0.72rem; color: var(--accent); font-family: monospace;">UID: ${reg.uid} &bull; ID: ${reg.studentId}</div>
+                      <div style="font-size: 0.68rem; color: var(--text-muted);">${timeStr ? `Registered at ${timeStr}` : 'Registered today'}</div>
+                    </div>
+                    <div>${syncBadge}</div>
+                  </div>
+                `;
+              }).join("")}
+            </div>
+          `;
+        }
+      }
+
+      container.innerHTML = html;
     }
 
     async function startSession() {
@@ -2130,6 +2459,7 @@
       }
 
       updateSyncBadges();
+      renderTodayActivity();
       scheduleDebouncedSync(500);
 
       setTimeout(() => {
@@ -2343,6 +2673,7 @@
           updateSessionCounter();
           renderRegistrationStudentList();
           updateSyncBadges();
+          renderTodayActivity();
 
           // Check if more unsynced items remain
           const remainingUnsyncedEvents = currentEvents.filter(e => !e.synced).length;
@@ -2389,6 +2720,7 @@
           const hasBio = !!loadStorage(BIOMETRIC_CRED_KEY, null);
           removeBtn.style.display = hasBio ? "inline-flex" : "none";
         }
+        renderTodayActivity();
       }
     }
 
