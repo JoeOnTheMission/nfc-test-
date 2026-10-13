@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#081326"/>
+      <stop offset="100%" stop-color="#020612"/>
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" fill="url(#bg)"/>
+  <!-- Circuit PCB Traces & Solder Pads -->
+  <path d="M 12 30 L 28 30 L 38 40" fill="none" stroke="#00f0ff" stroke-width="1.75" opacity="0.55"/>
+  <circle cx="12" cy="30" r="2.5" fill="#00f0ff" opacity="0.75"/>
+  <path d="M 88 70 L 72 70 L 62 60" fill="none" stroke="#00f0ff" stroke-width="1.75" opacity="0.55"/>
+  <circle cx="88" cy="70" r="2.5" fill="#00f0ff" opacity="0.75"/>
+  <path d="M 76 18 L 76 28 L 68 36" fill="none" stroke="#00f0ff" stroke-width="1.5" opacity="0.4"/>
+  <circle cx="76" cy="18" r="2" fill="#00f0ff" opacity="0.6"/>
+  <path d="M 24 82 L 24 72 L 32 64" fill="none" stroke="#00f0ff" stroke-width="1.5" opacity="0.4"/>
+  <circle cx="24" cy="82" r="2" fill="#00f0ff" opacity="0.6"/>
+  <!-- Contactless Broadcast Waves -->
+  <path d="M 38 24 A 14 14 0 0 1 62 24" fill="none" stroke="#00f0ff" stroke-width="2.5" stroke-linecap="round" opacity="0.85"/>
+  <path d="M 30 17 A 23 23 0 0 1 70 17" fill="none" stroke="#00f0ff" stroke-width="2" stroke-linecap="round" opacity="0.45"/>
+  <!-- RFID Hexagon Chip Frame -->
+  <polygon points="50,28 76,42 76,70 50,84 24,70 24,42" fill="rgba(0,240,255,0.14)" stroke="#00f0ff" stroke-width="3" stroke-linejoin="round"/>
+  <!-- Centered Bold TAP Text -->
+  <text x="50" y="62" font-size="19" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" text-anchor="middle" fill="#00f0ff" font-weight="900" letter-spacing="1.5">TAP</text>
+</svg>
